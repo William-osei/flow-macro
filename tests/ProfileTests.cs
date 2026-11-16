@@ -131,7 +131,7 @@ internal static class ProfileTests
                 ProfileLibrary library = new ProfileLibrary(Folder()); library.Save(Profile("Farm"));
                 Check(Rejects(delegate { library.Save(Profile("\n")); }) && Rejects(delegate { library.Save(Profile(new string('x', 61))); }), "name bounds");
                 Check(Rejects(delegate { library.Save(Profile("\nFarm")); }), "control characters rejected before trim");
-                MacroWorkspaceProfile wrong = Profile("Farm"); wrong.Version = 2;
+                MacroWorkspaceProfile wrong = Profile("Farm"); wrong.Version = 3;
                 Check(Rejects(delegate { library.Save(wrong); }) && library.Load("Farm").Version == 1, "version rejection preserves existing data");
             });
             Run("Validation bounds row counts and preserves empty drafts", delegate
@@ -190,6 +190,57 @@ internal static class ProfileTests
                 Check(rejected && library.ListNames().Count == 100, "capacity enforced");
                 MacroWorkspaceProfile replacement = Profile("Preset 0"); replacement.Sequence.LoopDelayMs = 3000; library.Save(replacement);
                 Check(library.Load("Preset 0").Sequence.LoopDelayMs == 3000, "replacement works at capacity");
+            });
+            Run("Named multiple-point profiles use version two and preserve detached route points", delegate
+            {
+                ProfileLibrary library = new ProfileLibrary(Folder()); MacroWorkspaceProfile source = Profile("Point route");
+                source.Clicker.UseMultiplePoints = true;
+                source.Clicker.Points.Add(new ClickPoint { X = 11, Y = 22 }); source.Clicker.Points.Add(new ClickPoint { X = 33, Y = 44 });
+                source.Clicker.MaxClicks = 7; source.Clicker.Burst = 3;
+                library.Save(source); Check(source.Version == 1 && source.Clicker.Points[0].X == 11, "save does not change caller version or route");
+                source.Clicker.Points[0].X = 99; source.Clicker.Points.Clear();
+                MacroWorkspaceProfile loaded = library.Load("Point route");
+                Check(loaded.Version == 2 && loaded.Clicker.UseMultiplePoints && loaded.Clicker.Points.Count == 2 && loaded.Clicker.Points[0].X == 11 && loaded.Clicker.Points[1].Y == 44, "ordered points persist independently of caller");
+                Check(loaded.Timers.Version == 1 && loaded.Sequence.Version == 1 && loaded.Clicker.MaxClicks == 7 && loaded.Clicker.Burst == 3, "nested modes and click settings remain compatible");
+                loaded.Clicker.UseMultiplePoints = false; library.Save(loaded);
+                Check(library.Load("Point route").Version == 2, "retained inactive points still require a route-aware reader");
+            });
+            Run("Empty route drafts save safely and version-one files cannot smuggle point routes", delegate
+            {
+                string folder = Folder(); ProfileLibrary library = new ProfileLibrary(folder); MacroWorkspaceProfile source = Profile("Route draft");
+                source.Clicker.UseMultiplePoints = true; library.Save(source);
+                Check(library.Load(source.Name).Version == 2 && library.Load(source.Name).Clicker.Points.Count == 0, "empty route remains an editable version-two draft");
+                string file = Directory.GetFiles(folder, "*.json")[0]; JavaScriptSerializer serializer = new JavaScriptSerializer();
+                Dictionary<string, object> document = (Dictionary<string, object>)serializer.DeserializeObject(File.ReadAllText(file));
+                document["Version"] = 1; File.WriteAllText(file, serializer.Serialize(document));
+                Check(Rejects(delegate { library.Load(source.Name); }) && library.ListNames().Count == 0, "legacy reader semantics cannot silently downgrade a route");
+            });
+            Run("Legacy null or missing point lists normalize and invalid points preserve saved profiles", delegate
+            {
+                string folder = Folder(); ProfileLibrary library = new ProfileLibrary(folder); MacroWorkspaceProfile source = Profile("Mouse settings"); library.Save(source);
+                string file = Directory.GetFiles(folder, "*.json")[0]; JavaScriptSerializer serializer = new JavaScriptSerializer();
+                Dictionary<string, object> document = (Dictionary<string, object>)serializer.DeserializeObject(File.ReadAllText(file));
+                Dictionary<string, object> clicker = (Dictionary<string, object>)document["Clicker"];
+                clicker.Remove("Points"); clicker.Remove("UseMultiplePoints"); File.WriteAllText(file, serializer.Serialize(document));
+                Check(library.Load(source.Name).Version == 1 && library.Load(source.Name).Clicker.Points.Count == 0, "missing list keeps old single-point behavior");
+                clicker["Points"] = null; File.WriteAllText(file, serializer.Serialize(document));
+                Check(library.Load(source.Name).Clicker.Points.Count == 0, "explicit null list is normalized");
+                source.Clicker.UseMultiplePoints = true; source.Clicker.Points.Add(new ClickPoint { X = -1 });
+                Check(Rejects(delegate { library.Save(source); }) && library.Load(source.Name).Version == 1, "invalid route never replaces the existing file");
+            });
+            Run("Persisted point coordinates cannot default missing values or coerce invalid types", delegate
+            {
+                string folder = Folder(); ProfileLibrary library = new ProfileLibrary(folder); MacroWorkspaceProfile source = Profile("Strict points"); library.Save(source);
+                string file = Directory.GetFiles(folder, "*.json")[0]; JavaScriptSerializer serializer = new JavaScriptSerializer();
+                Dictionary<string, object> document = (Dictionary<string, object>)serializer.DeserializeObject(File.ReadAllText(file));
+                Dictionary<string, object> clicker = (Dictionary<string, object>)document["Clicker"]; document["Version"] = 2; clicker["UseMultiplePoints"] = true;
+                foreach (object invalid in new object[] { new Dictionary<string, object> { { "X", 10 } }, new Dictionary<string, object> { { "X", 10.5 }, { "Y", 20 } }, new Dictionary<string, object> { { "X", "10" }, { "Y", 20 } } })
+                {
+                    clicker["Points"] = new object[] { invalid }; File.WriteAllText(file, serializer.Serialize(document));
+                    Check(Rejects(delegate { library.Load(source.Name); }), "incomplete or coerced point must not load");
+                }
+                document.Remove("Clicker"); document["clicker"] = clicker; File.WriteAllText(file, serializer.Serialize(document));
+                Check(Rejects(delegate { library.Load(source.Name); }), "case-insensitive member mapping cannot bypass raw point validation");
             });
             Console.WriteLine(passed + " profile library tests passed."); return 0;
         }

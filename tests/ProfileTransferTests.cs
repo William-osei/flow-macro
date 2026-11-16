@@ -144,12 +144,58 @@ internal static class ProfileTransferTests
             Run("Invalid export preserves existing destination and missing folders stay absent", delegate
             {
                 string path = FilePath(); ProfileTransfer.Export(Profile(), path); byte[] before = File.ReadAllBytes(path);
-                MacroWorkspaceProfile invalid = Profile(); invalid.Version = 2; bool rejected = false;
+                MacroWorkspaceProfile invalid = Profile(); invalid.Version = 3; bool rejected = false;
                 try { ProfileTransfer.Export(invalid, path); } catch (ArgumentException) { rejected = true; }
                 Check(rejected && Convert.ToBase64String(before) == Convert.ToBase64String(File.ReadAllBytes(path)), "invalid export cannot overwrite");
                 string missing = Path.Combine(root, "missing-folder"); rejected = false;
                 try { ProfileTransfer.Export(Profile(), Path.Combine(missing, "macro.json")); } catch (DirectoryNotFoundException) { rejected = true; }
                 Check(rejected && !Directory.Exists(missing), "no implicit parent creation");
+            });
+            Run("Portable point routes use version two and round-trip without mutating the caller", delegate
+            {
+                string path = FilePath(); MacroWorkspaceProfile source = Profile();
+                source.Clicker.UseMultiplePoints = true; source.Clicker.Points.Add(new ClickPoint { X = 12, Y = 34 }); source.Clicker.Points.Add(new ClickPoint { X = 56, Y = 78 });
+                source.Clicker.Burst = 2; source.Clicker.MaxClicks = 11;
+                ProfileTransfer.Export(source, path); MacroWorkspaceProfile imported = ProfileTransfer.Import(path);
+                Check(source.Version == 1 && imported.Version == 2 && imported.Clicker.UseMultiplePoints && imported.Clicker.Points.Count == 2, "route writer opts into an older-build rejection version without caller mutation");
+                Check(imported.Clicker.Points[0].X == 12 && imported.Clicker.Points[1].Y == 78 && imported.Clicker.Burst == 2 && imported.Clicker.MaxClicks == 11, "route points, order and exact total retained");
+                imported.Clicker.Points[0].X = 90; Check(ProfileTransfer.Import(path).Clicker.Points[0].X == 12, "imports own detached point objects");
+                source.Clicker.UseMultiplePoints = false; ProfileTransfer.Export(source, path);
+                Check(ProfileTransfer.Import(path).Version == 2, "inactive saved route points still use version two");
+            });
+            Run("Portable route drafts remain editable and version-one route documents reject", delegate
+            {
+                string path = FilePath(); MacroWorkspaceProfile source = Profile(); source.Clicker.UseMultiplePoints = true;
+                ProfileTransfer.Export(source, path); MacroWorkspaceProfile imported = ProfileTransfer.Import(path);
+                Check(imported.Version == 2 && imported.Clicker.Points.Count == 0 && imported.Clicker.UseMultiplePoints, "unplaced route is a valid saved draft");
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
+                Dictionary<string, object> document = (Dictionary<string, object>)serializer.DeserializeObject(File.ReadAllText(path));
+                document["Version"] = 1; File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "version one cannot carry enabled route mode");
+                Dictionary<string, object> clicker = (Dictionary<string, object>)document["Clicker"]; clicker["UseMultiplePoints"] = false;
+                clicker["Points"] = new object[] { new Dictionary<string, object> { { "X", 10 }, { "Y", 20 } } };
+                File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "version one cannot hide inactive route points either");
+            });
+            Run("Portable legacy point defaults remain compatible and malformed routes never import", delegate
+            {
+                string path = FilePath(); ProfileTransfer.Export(Profile(), path); JavaScriptSerializer serializer = new JavaScriptSerializer();
+                Dictionary<string, object> document = (Dictionary<string, object>)serializer.DeserializeObject(File.ReadAllText(path));
+                Dictionary<string, object> clicker = (Dictionary<string, object>)document["Clicker"];
+                clicker.Remove("Points"); clicker.Remove("UseMultiplePoints"); File.WriteAllText(path, serializer.Serialize(document));
+                Check(ProfileTransfer.Import(path).Version == 1 && ProfileTransfer.Import(path).Clicker.Points.Count == 0, "old single-click file defaults");
+                clicker["Points"] = null; File.WriteAllText(path, serializer.Serialize(document)); Check(ProfileTransfer.Import(path).Clicker.Points.Count == 0, "null list defaults");
+                document["Version"] = 2; clicker["UseMultiplePoints"] = true;
+                foreach (object invalid in new object[] { new object[] { null }, new object[] { new Dictionary<string, object> { { "X", -1 }, { "Y", 2 } } }, new object[] { new Dictionary<string, object> { { "X", 2147483648L }, { "Y", 2 } } }, new object[] { new Dictionary<string, object> { { "X", 10 } } }, new object[] { new Dictionary<string, object> { { "X", 1.5 }, { "Y", 2 } } }, new object[] { new Dictionary<string, object> { { "X", "1" }, { "Y", 2 } } } })
+                {
+                    clicker["Points"] = invalid; File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "invalid route entries fail before loading");
+                }
+                document.Remove("Clicker"); document["clicker"] = clicker; File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "cased clicker alias cannot bypass validation");
+                document.Remove("clicker"); document["Clicker"] = clicker; clicker.Remove("Points");
+                clicker["points"] = new object[] { new Dictionary<string, object> { { "X", 10 } } };
+                File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "cased point-list alias cannot bypass validation");
+                clicker.Remove("points"); clicker["Points"] = new object[] { new Dictionary<string, object> { { "x", 10 }, { "Y", 20 } } };
+                File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "cased coordinate alias is not accepted ambiguously");
+                clicker["Points"] = new object[] { new Dictionary<string, object> { { "X", 10 }, { "Y", 20 } } }; clicker["usemultiplepoints"] = false;
+                File.WriteAllText(path, serializer.Serialize(document)); Check(InvalidImport(path), "duplicate case aliases never choose a different playback mode");
             });
             Console.WriteLine(passed + " portable profile tests passed."); return 0;
         }

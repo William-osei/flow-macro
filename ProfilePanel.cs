@@ -319,7 +319,7 @@ namespace FarmMacro
                 int enabled = 0;
                 foreach (MacroAction action in profile.Timers.Actions) if (action.Enabled) enabled++;
                 QuickClickSettings clicker = profile.Clicker ?? new QuickClickSettings();
-                summary.Text = clicker.Input + "  \u2022  " + enabled + " timer" + (enabled == 1 ? "" : "s") + "  \u2022  " +
+                summary.Text = (clicker.UseMultiplePoints ? clicker.Points.Count + " ordered click points" : clicker.Input) + "  \u2022  " + enabled + " timer" + (enabled == 1 ? "" : "s") + "  \u2022  " +
                     profile.Sequence.Steps.Count + " recorded events";
             }
             catch (Exception error) { ShowStatus("Could not inspect profile: " + error.Message, true); }

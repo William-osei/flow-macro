@@ -11,6 +11,7 @@ internal sealed class FakeInput : IInputBackend, IInputReadiness
     public bool FailPress;
     public bool FailRelease;
     public List<string> Events = new List<string>();
+    public List<MacroAction> Presses = new List<MacroAction>();
     public HashSet<string> Held = new HashSet<string>();
     public void BindTarget(IntPtr target) { Events.Add("bind"); }
     public bool IsTargetForeground(IntPtr target) { return Focus; }
@@ -19,6 +20,7 @@ internal sealed class FakeInput : IInputBackend, IInputReadiness
         if (FailPress) throw new InvalidOperationException("press failure");
         if (!Accept) return false;
         Events.Add("down:" + action.Input);
+        Presses.Add(action.Clone());
         Held.Add(action.Input);
         return true;
     }
@@ -46,6 +48,13 @@ internal static class EngineTests
     {
         time = 0;
         return new MacroEngine(backend, delegate { return time; });
+    }
+    private static QuickClickSettings Route(int burst = 1, int hold = 40, int interval = 100)
+    {
+        return new QuickClickSettings {
+            UseMultiplePoints = true, Burst = burst, HoldMs = hold, IntervalMs = interval, CountdownSeconds = 1,
+            Points = new List<ClickPoint> { new ClickPoint { X = 10, Y = 20 }, new ClickPoint { X = 30, Y = 40 } }
+        };
     }
     private static void Check(bool condition, string label)
     {
@@ -369,6 +378,120 @@ internal static class EngineTests
                 MacroAction z = Action("Z", 24000, 60, 2); z.KeepCooldownOnResume = true; bool rejected = false;
                 try { engine.Start(new IntPtr(1), new[] { z }, 0, 0); } catch (ArgumentException) { rejected = true; }
                 Check(rejected && fake.Events.Count == 0, "protected bursts must not bind or send input");
+            });
+            Run("Ordered mouse points wait for countdown then visit every point and wrap", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); QuickClickSettings settings = Route(1, 10);
+                settings.Points.Add(new ClickPoint { X = 50, Y = 60 });
+                engine.StartOrdered(new IntPtr(1), settings); engine.Tick(); time = 999; engine.Tick();
+                Check(engine.TotalActions == 0, "ordered countdown sends nothing");
+                for (time = 1000; time <= 1300; time += 100) engine.Tick();
+                Check(fake.Presses.Count == 4 && fake.Presses[0].X == 10 && fake.Presses[1].X == 30 && fake.Presses[2].X == 50 && fake.Presses[3].X == 10, "strict 1-2-3-1 order");
+                Check(fake.Presses[0].Y == 20 && fake.Presses[1].Y == 40 && fake.Presses[2].Y == 60, "target-relative point pairs retained");
+            });
+            Run("Ordered bursts finish a point and exact totals can stop partway through the next", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); QuickClickSettings settings = Route(3, 20);
+                settings.MaxClicks = 5; engine.StartOrdered(new IntPtr(1), settings);
+                foreach (int stamp in new[] { 1000, 1020, 1060, 1080, 1120, 1140, 1180, 1200, 1240, 1259 }) { time = stamp; engine.Tick(); }
+                Check(engine.TotalActions == 5 && engine.IsArmed && fake.Held.Count == 1, "final accepted down keeps its full hold");
+                Check(fake.Presses[0].X == 10 && fake.Presses[1].X == 10 && fake.Presses[2].X == 10 && fake.Presses[3].X == 30 && fake.Presses[4].X == 30, "burst is completed before changing points");
+                time = 1260; engine.Tick(); time = 99999; engine.Tick();
+                Check(!engine.IsArmed && fake.Held.Count == 0 && engine.TotalActions == 5, "no extra click after the partial final burst");
+            });
+            Run("Ordered routes release a long hold before moving to the next point", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake);
+                engine.StartOrdered(new IntPtr(1), Route(1, 100)); time = 1000; engine.Tick();
+                time = 1099; engine.Tick(); Check(fake.Presses.Count == 1 && fake.Held.Count == 1, "pointer stays at the held point");
+                time = 1100; engine.Tick(); time = 1129; engine.Tick();
+                Check(fake.Held.Count == 0 && fake.Presses.Count == 1, "release and minimum gap happen before moving");
+                time = 1130; engine.Tick(); Check(fake.Presses.Count == 2 && fake.Presses[1].X == 30, "next point receives the next down");
+            });
+            Run("Focus pauses preserve an ordered point's unfinished burst without catch-up", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake);
+                engine.StartOrdered(new IntPtr(1), Route(2, 40, 200)); time = 1000; engine.Tick();
+                fake.Focus = false; time = 1020; engine.Tick(); time = 10000; engine.Tick();
+                Check(fake.Held.Count == 0 && engine.TotalActions == 1, "focus loss releases and sends nothing while away");
+                fake.Focus = true; engine.Tick(); engine.Tick();
+                Check(engine.TotalActions == 2 && fake.Presses[1].X == 10, "resume completes only the remaining first-point click");
+                time = 10040; engine.Tick(); time = 10200; engine.Tick(); time = 10270; engine.Tick();
+                Check(fake.Presses.Count == 4 && fake.Presses[2].X == 30 && fake.Presses[3].X == 30, "second point gets its own complete burst");
+            });
+            Run("Focus after a completed visit resumes at the next point and respects the total", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); QuickClickSettings settings = Route(); settings.MaxClicks = 2;
+                engine.StartOrdered(new IntPtr(1), settings); time = 1000; engine.Tick();
+                fake.Focus = false; time = 1010; engine.Tick(); fake.Focus = true; time = 10000; engine.Tick();
+                Check(fake.Presses.Count == 2 && fake.Presses[1].X == 30 && engine.IsArmed, "resume does not restart point one");
+                time = 10040; engine.Tick(); Check(!engine.IsArmed && fake.Held.Count == 0 && engine.TotalActions == 2, "counted completion releases the second point");
+            });
+            Run("Rejected ordered clicks retry the same point without consuming the total", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); fake.Accept = false;
+                engine.StartOrdered(new IntPtr(1), Route()); time = 1000; engine.Tick(); time = 1099; engine.Tick();
+                Check(engine.TotalActions == 0 && fake.Presses.Count == 0, "unsafe attempts do not count");
+                fake.Accept = true; time = 1100; engine.Tick(); time = 1200; engine.Tick();
+                Check(fake.Presses.Count == 2 && fake.Presses[0].X == 10 && fake.Presses[1].X == 30, "successful retry precedes the next point");
+            });
+            Run("Readiness pauses retain ordered points without advancing or replaying visits", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); fake.Ready = false;
+                engine.StartOrdered(new IntPtr(1), Route()); time = 1000; engine.Tick(); time = 3000; engine.Tick();
+                Check(engine.TotalActions == 0, "modifiers postpone the first point");
+                fake.Ready = true; engine.Tick(); time = 3040; engine.Tick(); fake.Ready = false; time = 4000; engine.Tick();
+                fake.Ready = true; time = 5000; engine.Tick(); engine.Tick();
+                Check(fake.Presses.Count == 2 && fake.Presses[0].X == 10 && fake.Presses[1].X == 30, "resume sends only the next due point");
+            });
+            Run("Ordered playback snapshots the point objects and mouse settings", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); QuickClickSettings source = Route(); source.Input = "Right click";
+                engine.StartOrdered(new IntPtr(1), source);
+                source.Points[0].X = 999; source.Points.Clear(); source.Input = "Middle click"; source.Burst = 20;
+                time = 1000; engine.Tick(); time = 1100; engine.Tick();
+                Check(fake.Presses.Count == 2 && fake.Presses[0].X == 10 && fake.Presses[1].X == 30 && fake.Presses[1].Input == "Right click", "active route is detached from edits");
+                engine.Stop(); Check(fake.Held.Count == 0 && !engine.IsArmed, "emergency stop releases the route's button");
+            });
+            Run("Ordered active-time limits exclude focus pauses and stop held input", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); QuickClickSettings settings = Route(); settings.SessionSeconds = 1;
+                engine.StartOrdered(new IntPtr(1), settings); time = 1000; engine.Tick(); time = 1100; engine.Tick();
+                fake.Focus = false; time = 1200; engine.Tick(); time = 10000; engine.Tick(); fake.Focus = true; engine.Tick();
+                Check(engine.IsArmed && engine.TotalActions == 3 && engine.ActiveDuration.TotalMilliseconds == 100, "paused time is excluded");
+                time = 10900; engine.Tick(); Check(!engine.IsArmed && fake.Held.Count == 0 && engine.ActiveDuration.TotalMilliseconds == 1000, "active session limit stops safely");
+            });
+            Run("Ordered routes run indefinitely beyond twenty seconds and normal Start resets route mode", delegate
+            {
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake);
+                engine.StartOrdered(new IntPtr(1), Route(1, 40, 1000));
+                for (time = 1000; time <= 31000; time += 1000) engine.Tick();
+                Check(engine.IsArmed && engine.TotalActions == 31 && fake.Presses[30].X == 10, "unlimited ordered loop remains active");
+                engine.Stop(); Check(fake.Held.Count == 0, "stop releases before another mode");
+                engine.Start(new IntPtr(1), new[] { Action("Space", 1000, 60, 1) }, 0, 0); engine.Tick();
+                Check(engine.TotalActions == 1 && fake.Presses[fake.Presses.Count - 1].Input == "Space" && !fake.Presses[fake.Presses.Count - 1].X.HasValue, "normal routine start clears ordered state");
+            });
+            Run("Multiple-point settings clone deeply and invalid routes fail before binding", delegate
+            {
+                QuickClickSettings source = Route(); QuickClickSettings copy = source.Clone(); copy.Points[0].X = 70; copy.Points.Add(new ClickPoint());
+                Check(source.Points.Count == 2 && source.Points[0].X == 10, "settings clone owns the list and each point");
+                source.Points = null; source.Validate(); Check(source.Points.Count == 0 && source.Clone().Points.Count == 0, "legacy null lists normalize to editable empty drafts");
+                FakeInput fake = new FakeInput(); MacroEngine engine = Engine(fake); bool rejected = false;
+                try { engine.StartOrdered(new IntPtr(1), source); } catch (ArgumentException) { rejected = true; }
+                Check(rejected && fake.Events.Count == 0, "empty routes never bind");
+                source.Points.Add(new ClickPoint { X = -1 }); rejected = false;
+                try { engine.StartOrdered(new IntPtr(1), source); } catch (ArgumentException) { rejected = true; }
+                Check(rejected && fake.Events.Count == 0, "negative point never binds");
+                source.Points.Clear(); source.Points.Add(null); rejected = false;
+                try { source.Validate(); } catch (ArgumentException) { rejected = true; }
+                Check(rejected, "null point rejected");
+                source.Points.Clear(); for (int index = 0; index <= QuickClickSettings.MaximumPoints; index++) source.Points.Add(new ClickPoint()); rejected = false;
+                try { source.Validate(); } catch (ArgumentException) { rejected = true; }
+                Check(rejected, "point limit enforced");
+                source.Points.RemoveAt(source.Points.Count - 1); engine.StartOrdered(new IntPtr(1), source);
+                time = 1000; engine.Tick(); Check(engine.IsArmed && engine.TotalActions == 1, "exactly one hundred points is supported"); engine.Stop();
+                source.Points.Clear(); rejected = false; try { source.ToAction(); } catch (ArgumentException) { rejected = true; }
+                Check(rejected, "multi-point mode cannot silently become a single-click action");
             });
             Console.WriteLine(passed + " tests passed.");
             return 0;

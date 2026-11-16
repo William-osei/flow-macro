@@ -29,6 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Engine tests failed.' }
 $sequenceExecutable = Join-Path $buildPath 'SequenceTests.exe'
 $sequenceSources = @(
     (Join-Path $projectRoot 'MacroEngine.cs'),
+    (Join-Path $projectRoot 'QuickClickSettings.cs'),
     (Join-Path $projectRoot 'NativeInput.cs'),
     (Join-Path $projectRoot 'InputPermissions.cs'),
     (Join-Path $projectRoot 'SequenceEngine.cs'),
@@ -59,6 +60,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Portable profile tests failed.' }
 $keyboardExecutable = Join-Path $buildPath 'KeyboardPacketTests.exe'
 $keyboardSources = @(
     (Join-Path $projectRoot 'MacroEngine.cs'),
+    (Join-Path $projectRoot 'QuickClickSettings.cs'),
     (Join-Path $projectRoot 'NativeInput.cs'),
     (Join-Path $projectRoot 'InputPermissions.cs'),
     (Join-Path $projectRoot 'SequenceEngine.cs'),
@@ -92,3 +94,11 @@ $presetSources += Join-Path $projectRoot 'tests\BundledPresetTests.cs'
 if ($LASTEXITCODE -ne 0) { throw 'Bundled preset test compilation failed.' }
 & $presetExecutable $projectRoot
 if ($LASTEXITCODE -ne 0) { throw 'Bundled preset tests failed.' }
+
+$routeExecutable = Join-Path $buildPath 'PointRouteTests.exe'
+$routeSources = @((Get-ChildItem -LiteralPath $projectRoot -Filter '*.cs' -File).FullName)
+$routeSources += Join-Path $projectRoot 'tests\PointRouteTests.cs'
+& $compilerPath /nologo /target:exe /main:PointRouteTests /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "/out:$routeExecutable" @routeSources
+if ($LASTEXITCODE -ne 0) { throw 'Point route test compilation failed.' }
+& $routeExecutable
+if ($LASTEXITCODE -ne 0) { throw 'Point route tests failed.' }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 — 2026-11-16
+
+- Added ordered multi-point clicking to the Windows Mouse clicker page, with numbered circles, Arrange points and F11 append.
+- Added an over-target editor for placing, dragging, reordering and removing up to 100 points. Save and Cancel leave playback stopped; target changes close the editor for review.
+- Point routes complete each point's burst before moving to the next, retain unfinished progress across focus pauses, and obey global click/time limits.
+- Added deep point snapshots and version-2 route profiles; earlier profiles remain readable, and older apps reject new route files.
+- Added route model, scheduling, persistence and small/scaled interface checks. Android remains the 1.6.0 preview.
+
 ## 1.6.0 — 2026-11-16
 
 - Added Android straight-swipe actions alongside taps, with endpoint mapping and per-action duration.

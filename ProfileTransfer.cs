@@ -26,6 +26,7 @@ namespace FarmMacro
         {
             profile.Name = profile.Name.Trim().Normalize(NormalizationForm.FormC);
             if (profile.Clicker == null) profile.Clicker = new QuickClickSettings();
+            profile.Version = profile.Clicker.UseMultiplePoints || profile.Clicker.Points.Count > 0 ? 2 : 1;
             profile.Clicker.Input = NativeInput.NormalizeInput(profile.Clicker.Input);
             foreach (MacroAction action in profile.Timers.Actions) action.Input = NativeInput.NormalizeInput(action.Input);
             foreach (MacroStep step in profile.Sequence.Steps) step.Input = NativeInput.NormalizeInput(step.Input);
@@ -93,7 +94,8 @@ namespace FarmMacro
             {
                 JavaScriptSerializer serializer = Serializer();
                 Dictionary<string, object> document = serializer.DeserializeObject(json) as Dictionary<string, object>;
-                RequireVersion(document);
+                RequireVersion(document, true);
+                ProfileLibrary.RequirePointDocument(document);
                 object name, timerObject, sequenceObject;
                 if (!document.TryGetValue("Name", out name) || !(name is string) ||
                     !document.TryGetValue("Timers", out timerObject) || !document.TryGetValue("Sequence", out sequenceObject))
@@ -107,6 +109,7 @@ namespace FarmMacro
                     throw new ArgumentException("The profile contains unsupported row counts.");
                 MacroWorkspaceProfile profile = serializer.Deserialize<MacroWorkspaceProfile>(json);
                 ProfileLibrary.Validate(profile);
+                ProfileLibrary.RequireRouteVersion(profile);
                 NormalizeSnapshot(profile);
                 return profile;
             }
@@ -117,10 +120,11 @@ namespace FarmMacro
             }
         }
 
-        private static void RequireVersion(Dictionary<string, object> document)
+        private static void RequireVersion(Dictionary<string, object> document, bool workspace = false)
         {
             object version;
-            if (document == null || !document.TryGetValue("Version", out version) || !(version is int) || (int)version != 1)
+            if (document == null || !document.TryGetValue("Version", out version) || !(version is int) ||
+                ((int)version != 1 && (!workspace || (int)version != 2)))
                 throw new ArgumentException("Unsupported or missing profile version.");
         }
     }

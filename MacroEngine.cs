@@ -64,6 +64,8 @@ namespace FarmMacro
         private int nextRow;
         private bool wasForeground;
         private bool previousWasActive;
+        private List<ClickPoint> orderedPoints;
+        private int orderedPoint;
 
         public MacroEngine(IInputBackend backend)
             : this(backend, CreateClock()) { }
@@ -96,6 +98,8 @@ namespace FarmMacro
         public void Start(IntPtr targetWindow, IEnumerable<MacroAction> actions, int countdownMs, int sessionLimitMs, long maxActions)
         {
             if (IsArmed) Stop();
+            orderedPoints = null;
+            orderedPoint = 0;
             if (targetWindow == IntPtr.Zero) throw new ArgumentException("Choose a target window.");
             if (countdownMs < 0 || countdownMs > 60000) throw new ArgumentException("Countdown must be 0 to 60 seconds.");
             if (sessionLimitMs < 0) throw new ArgumentException("Session limit cannot be negative.");
@@ -147,6 +151,21 @@ namespace FarmMacro
             IsArmed = true;
             IsSending = false;
             Status = countdownMs > 0 ? "Starting in " + ((countdownMs + 999) / 1000) + "s" : "Waiting for target focus";
+        }
+
+        public void StartOrdered(IntPtr targetWindow, QuickClickSettings source)
+        {
+            if (source == null) throw new ArgumentNullException("source");
+            QuickClickSettings settings = source.Clone();
+            settings.Validate();
+            if (!settings.UseMultiplePoints) throw new ArgumentException("Choose Multiple points before starting an ordered route.");
+            if (settings.Points.Count == 0) throw new ArgumentException("Add at least one click point before starting.");
+            settings.UseMultiplePoints = false;
+            settings.X = settings.Points[0].X;
+            settings.Y = settings.Points[0].Y;
+            Start(targetWindow, new[] { settings.ToAction() }, settings.CountdownSeconds * 1000, settings.SessionSeconds * 1000, settings.MaxClicks);
+            orderedPoints = settings.Points;
+            orderedPoint = 0;
         }
 
         public void Stop() { Halt("Stopped"); }
@@ -208,7 +227,7 @@ namespace FarmMacro
             if (limitMs > 0 && activeMs >= limitMs) { Halt("Session limit reached"); return; }
             previousWasActive = true;
             IsSending = true;
-            Status = "Sending input to the selected window";
+            Status = orderedPoints == null ? "Sending input to the selected window" : "Cycling " + orderedPoints.Count + " click points in order";
             if (!wasForeground)
             {
                 // Normal rows restart their offsets. Opted-in single presses keep
@@ -216,6 +235,14 @@ namespace FarmMacro
                 // A new Start creates fresh rows and deliberately resets deadlines.
                 foreach (ScheduledAction row in scheduled)
                 {
+                    if (orderedPoints != null)
+                    {
+                        // Keep the next point and any unfinished burst; resuming
+                        // stages one press now rather than replaying missed visits.
+                        row.CycleAt = now;
+                        row.NextAt = now;
+                        continue;
+                    }
                     row.Remaining = 0;
                     row.NextAt = row.Action.KeepCooldownOnResume && row.HasPressed
                         ? Math.Max(now, row.CooldownUntil) : now + row.Action.OffsetMs;
@@ -273,6 +300,12 @@ namespace FarmMacro
                 row.Remaining--;
                 int gap = Math.Max(60, row.Action.HoldMs + 30);
                 row.NextAt = row.Remaining > 0 ? now + gap : Math.Max(row.CycleAt + row.Action.IntervalMs, now + gap);
+                if (orderedPoints != null && row.Remaining == 0)
+                {
+                    orderedPoint = (orderedPoint + 1) % orderedPoints.Count;
+                    row.Action.X = orderedPoints[orderedPoint].X;
+                    row.Action.Y = orderedPoints[orderedPoint].Y;
+                }
                 nextPressAt = now + 20;
                 nextRow = (index + 1) % scheduled.Count;
                 return;

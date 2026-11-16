@@ -58,7 +58,7 @@ namespace FarmMacro
 
         public static void Validate(MacroWorkspaceProfile profile)
         {
-            if (profile == null || profile.Version != 1) throw new ArgumentException("Unsupported library profile version.");
+            if (profile == null || (profile.Version != 1 && profile.Version != 2)) throw new ArgumentException("Unsupported library profile version.");
             NormalizeName(profile.Name);
             if (profile.Timers == null || profile.Sequence == null) throw new ArgumentException("A profile must contain timer and sequence settings.");
             (profile.Clicker ?? new QuickClickSettings()).Validate();
@@ -178,11 +178,50 @@ namespace FarmMacro
             if (!String.Equals(profile.Name, normalized, StringComparison.Ordinal)) throw new InvalidDataException("The profile name does not match its file.");
             return profile;
         }
-        private static void RequireVersion(Dictionary<string, object> item)
+        private static void RequireVersion(Dictionary<string, object> item, bool workspace = false)
         {
             object value;
-            if (item == null || !item.TryGetValue("Version", out value) || !(value is int) || (int)value != 1)
+            if (item == null || !item.TryGetValue("Version", out value) || !(value is int) ||
+                ((int)value != 1 && (!workspace || (int)value != 2)))
                 throw new ArgumentException("Unsupported or missing profile version.");
+        }
+        internal static void RequireRouteVersion(MacroWorkspaceProfile profile)
+        {
+            if (profile.Version == 1 && profile.Clicker != null && (profile.Clicker.UseMultiplePoints || profile.Clicker.Points.Count > 0))
+                throw new ArgumentException("Multiple click points require workspace profile version 2.");
+        }
+        internal static void RequirePointDocument(Dictionary<string, object> document)
+        {
+            object clickerObject;
+            if (!PointField(document, "Clicker", out clickerObject) || clickerObject == null) return;
+            Dictionary<string, object> clicker = clickerObject as Dictionary<string, object>;
+            if (clicker == null) throw new ArgumentException("Invalid mouse-clicker settings.");
+            object enabled;
+            if (PointField(clicker, "UseMultiplePoints", out enabled) && !(enabled is bool))
+                throw new ArgumentException("Multiple-point mode must be true or false.");
+            object pointObject;
+            if (!PointField(clicker, "Points", out pointObject) || pointObject == null) return;
+            IList points = pointObject as IList;
+            if (points == null || points.Count > QuickClickSettings.MaximumPoints)
+                throw new ArgumentException("Use at most " + QuickClickSettings.MaximumPoints + " click points.");
+            foreach (object item in points)
+            {
+                Dictionary<string, object> point = item as Dictionary<string, object>;
+                object x, y;
+                if (point == null || !PointField(point, "X", out x) || !PointField(point, "Y", out y) ||
+                    !(x is int) || !(y is int) || (int)x < 0 || (int)y < 0)
+                    throw new ArgumentException("Every click point must explicitly include whole-number X and Y coordinates.");
+            }
+        }
+        private static bool PointField(Dictionary<string, object> item, string name, out object value)
+        {
+            // JavaScriptSerializer maps members without regard to case. Reject
+            // aliases so differently cased keys cannot bypass the raw shape
+            // checks and supply a missing coordinate's default zero.
+            foreach (string key in item.Keys)
+                if (String.Equals(key, name, StringComparison.OrdinalIgnoreCase) && key != name)
+                    throw new ArgumentException("Use the exact field name " + name + " without duplicate aliases.");
+            return item.TryGetValue(name, out value);
         }
         private static MacroWorkspaceProfile ReadProfile(string path)
         {
@@ -197,7 +236,8 @@ namespace FarmMacro
             {
                 JavaScriptSerializer serializer = Serializer();
                 Dictionary<string, object> document = serializer.DeserializeObject(json) as Dictionary<string, object>;
-                RequireVersion(document);
+                RequireVersion(document, true);
+                RequirePointDocument(document);
                 object timerObject, sequenceObject, nameObject;
                 if (!document.TryGetValue("Name", out nameObject) || !(nameObject is string) ||
                     !document.TryGetValue("Timers", out timerObject) || !document.TryGetValue("Sequence", out sequenceObject))
@@ -222,6 +262,7 @@ namespace FarmMacro
                     throw new InvalidDataException("Invalid profile field values.", ex);
                 }
                 Validate(profile);
+                RequireRouteVersion(profile);
                 NormalizeSnapshot(profile);
                 return profile;
             }
@@ -232,6 +273,7 @@ namespace FarmMacro
         {
             profile.Name = NormalizeName(profile.Name);
             if (profile.Clicker == null) profile.Clicker = new QuickClickSettings();
+            profile.Version = profile.Clicker.UseMultiplePoints || profile.Clicker.Points.Count > 0 ? 2 : 1;
             profile.Clicker.Input = NativeInput.NormalizeInput(profile.Clicker.Input);
             foreach (MacroAction action in profile.Timers.Actions) action.Input = NativeInput.NormalizeInput(action.Input);
             foreach (MacroStep step in profile.Sequence.Steps) step.Input = NativeInput.NormalizeInput(step.Input);

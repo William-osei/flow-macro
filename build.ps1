@@ -6,7 +6,7 @@ if (-not (Test-Path -LiteralPath $compilerPath)) {
     $compilerPath = Join-Path $env:WINDIR 'Microsoft.NET/Framework/v4.0.30319/csc.exe'
 }
 if (-not (Test-Path -LiteralPath $compilerPath)) { throw 'The Windows .NET Framework C# compiler is required.' }
-$sourcePaths = @('Program.cs', 'AppInstance.cs', 'AssemblyInfo.cs', 'BrandAssets.cs', 'HelpForm.cs', 'InputPreferences.cs', 'InputDiagnosticsForm.cs', 'InputPermissions.cs', 'MacroEngine.cs', 'QuickClickSettings.cs', 'QuickClickPanel.cs', 'NativeInput.cs', 'MacroRecorder.cs', 'SequenceEngine.cs', 'SequencePanel.cs', 'UiTheme.cs', 'ProfileLibrary.cs', 'ProfilePanel.cs', 'ProfileTransfer.cs', 'BundledPresetCatalog.cs', 'WindowsDevicesPanel.cs', 'MobileProfileExport.cs') | ForEach-Object { Join-Path $taskRoot $_ }
+$sourcePaths = @('Program.cs', 'AppInstance.cs', 'AssemblyInfo.cs', 'BrandAssets.cs', 'HelpForm.cs', 'InputPreferences.cs', 'InputDiagnosticsForm.cs', 'InputPermissions.cs', 'MacroEngine.cs', 'QuickClickSettings.cs', 'QuickClickPanel.cs', 'PointRouteModel.cs', 'PointRouteEditor.cs', 'NativeInput.cs', 'MacroRecorder.cs', 'SequenceEngine.cs', 'SequencePanel.cs', 'UiTheme.cs', 'ProfileLibrary.cs', 'ProfilePanel.cs', 'ProfileTransfer.cs', 'BundledPresetCatalog.cs', 'WindowsDevicesPanel.cs', 'MobileProfileExport.cs') | ForEach-Object { Join-Path $taskRoot $_ }
 $iconPath = Join-Path $taskRoot 'assets/farm-macro.ico'
 if (-not (Test-Path -LiteralPath $iconPath)) { & (Join-Path $taskRoot 'scripts/BuildBrand.ps1') }
 if ([String]::IsNullOrWhiteSpace($OutputPath)) { $OutputPath = Join-Path $taskRoot 'FarmMacro.exe' }

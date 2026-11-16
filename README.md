@@ -6,9 +6,9 @@ A general-purpose Windows mouse clicker, keyboard timer and macro recorder, with
 
 ![Flow Macro mouse clicker workspace](docs/images/flow-macro.png)
 
-The current Windows release is **1.6.0**. Android **1.6.0** is a test build. Existing `FarmMacro.exe` launchers, local settings and tap-only profile files stay compatible.
+The current Windows release is **1.7.0**. Android **1.6.0** remains a test build. Existing `FarmMacro.exe` launchers, local settings and earlier profiles stay compatible with the current app.
 
-- Left, right and middle clicking, bursts, exact click totals and infinite sessions.
+- Left, right and middle clicking, numbered point routes, bursts, exact click totals and infinite sessions.
 - Independent keyboard and mouse timers, including cooldown timing across focus pauses.
 - Ordered recordings with key holds, chords and click positions.
 - Searchable named profiles, portable JSON import/export and a browser for general starter presets.
@@ -26,7 +26,7 @@ A new session does not automatically choose a game or another app. Launching, im
 
 | Page | Use it for |
 | --- | --- |
-| Mouse clicker | One mouse task with an optional exact click-count limit |
+| Mouse clicker | One mouse task or an ordered route of numbered click points |
 | Routines | Several keys or click points with independent timers |
 | Record & replay | An ordered sequence of keyboard holds and mouse clicks |
 | Profiles | Named setups for all three modes and portable JSON files |
@@ -37,6 +37,14 @@ A new session does not automatically choose a game or another app. Launching, im
 Choose left, right or middle click; set the interval and press duration; then choose single clicks, a double-click burst or a custom burst. The rate preview includes the time required to release each click.
 
 Use the current pointer position or a fixed point inside the target. **F11** captures a point while stopped; use the exact shortcut shown if Windows reserves that key. Coordinates are relative to the target's client area. Recheck points after resizing or changing its layout.
+
+Choose **Click position → Multiple points → Arrange points** to place numbered circles over the selected app. Click empty space to add **1, 2, 3…**, drag a circle to move it, and use Earlier/Later or Remove to change the route. The floating **+** adds another point. Save returns to Flow Macro without starting; Cancel keeps the previous layout. You can also hover over a visible target point and press F11 to append it while stopped.
+
+Start cycles **1 → 2 → 3 → 1**, completing the selected single/double/custom burst at each point. The interval applies between point visits, subject to completing the burst and releases. The click cap counts all individual clicks across the route. A focus pause releases held buttons and resumes the remaining route without catching up missed time. A new Start begins at point 1. Up to 100 points are supported.
+
+Editing circles close before playback so they cannot intercept clicks. Target moves are tracked during arrangement; a resize, close or minimize cancels the editor for review. Points remain relative to that target's client area. Recheck or re-map them before using a different app or layout.
+
+![Multiple numbered mouse points](docs/images/mouse-points.png)
 
 Use an exact **total click limit**, an active-time limit, or **Run indefinitely**. The total counts individual clicks, including clicks in a burst; the final burst can be partial. Counted completion lets the last held button release normally. Stop/F10 releases held inputs immediately.
 
@@ -61,6 +69,8 @@ Keep each input down balanced by an up event. Choose infinite replay, a loop cou
 ## Profiles
 
 **Profiles → Save current** stores the clicker, timer rows and recording together. Loading never starts a macro. Older profiles receive default clicker settings while keeping their original timers and recordings.
+
+Profiles with numbered mouse points use workspace format version 2, so older Windows builds reject them safely. The current app reads versions 1 and 2. Point order and inactive saved layouts are preserved through save, import and export. Timer and recorder subformats retain their version 1 identifiers.
 
 Use **Profiles → Included presets** to browse the general examples shipped beside the app. Choose a preset and **Add to library**, then select it in the saved list and choose **Load selected**. Pick **Mouse clicker**, **Routines** or **Record & replay** before starting. **Find** filters saved names; Escape clears the filter. Searching never loads or starts a routine.
 

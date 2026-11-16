@@ -75,6 +75,8 @@ namespace FarmMacro
         ProfilePanel profilePanel;
         WindowsDevicesPanel devicesPanel;
         InputDiagnosticsForm inputDiagnostics;
+        PointRouteEditor pointEditor;
+        bool IsArrangingPoints { get { return pointEditor != null && !pointEditor.IsDisposed; } }
         readonly NumericUpDown countdown = new NumericUpDown();
         readonly NumericUpDown session = new NumericUpDown();
         readonly CheckBox indefiniteTimers = new CheckBox();
@@ -132,7 +134,7 @@ namespace FarmMacro
             timer.Interval = 15;
             timer.Tick += delegate { TickEngine(); };
             if (!previewMode) timer.Start();
-            FormClosing += delegate { closing = true; timer.Stop(); if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) inputDiagnostics.StopTest(); engine.Stop(); sequencePanel.Stop(); };
+            FormClosing += delegate { closing = true; timer.Stop(); if (IsArrangingPoints) pointEditor.CancelEditing(); if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) inputDiagnostics.StopTest(); engine.Stop(); sequencePanel.Stop(); };
             Disposed += delegate
             {
                 tray.Visible = false; tray.Dispose(); tips.Dispose();
@@ -211,14 +213,15 @@ namespace FarmMacro
             repeatedLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             repeated.Controls.Add(repeatedLayout);
             quickClickPanel = new QuickClickPanel(delegate { ShowStatus("Point inside the selected target, then press " + pointLabel + " while stopped to save its position.", false); });
+            quickClickPanel.PointsEditRequested += delegate { ArrangeClickPoints(); };
             mouse.Controls.Add(quickClickPanel);
-            sequencePanel = new SequencePanel(delegate { return targets.SelectedItem as TargetWindow; }, delegate { return engine.IsArmed || (inputDiagnostics != null && !inputDiagnostics.IsDisposed); });
+            sequencePanel = new SequencePanel(delegate { return targets.SelectedItem as TargetWindow; }, delegate { return engine.IsArmed || IsArrangingPoints || (inputDiagnostics != null && !inputDiagnostics.IsDisposed); });
             sequencePanel.Dock = DockStyle.Fill;
             recorded.Controls.Add(sequencePanel);
-            profilePanel = new ProfilePanel(CaptureWorkspace, ApplyWorkspace, delegate { return engine.IsArmed || sequencePanel.IsBusy; });
+            profilePanel = new ProfilePanel(CaptureWorkspace, ApplyWorkspace, delegate { return engine.IsArmed || sequencePanel.IsBusy || IsArrangingPoints || (inputDiagnostics != null && !inputDiagnostics.IsDisposed); });
             profilePanel.Dock = DockStyle.Fill;
             library.Controls.Add(profilePanel);
-            devicesPanel = new WindowsDevicesPanel(CaptureMobileTimers, delegate { return engine.IsArmed || sequencePanel.IsBusy || (inputDiagnostics != null && !inputDiagnostics.IsDisposed); });
+            devicesPanel = new WindowsDevicesPanel(CaptureMobileTimers, delegate { return engine.IsArmed || sequencePanel.IsBusy || IsArrangingPoints || (inputDiagnostics != null && !inputDiagnostics.IsDisposed); });
             devicesPanel.Dock = DockStyle.Fill;
             devices.Controls.Add(devicesPanel);
             modes.TabPages.Add(mouse); modes.TabPages.Add(repeated); modes.TabPages.Add(recorded);
@@ -425,6 +428,7 @@ namespace FarmMacro
         }
         void OpenTestPad()
         {
+            if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
             try
             {
                 System.Diagnostics.Process.Start(Application.ExecutablePath, "--test-pad");
@@ -437,6 +441,7 @@ namespace FarmMacro
         }
         void OpenInputDiagnostics()
         {
+            if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
             Stop();
             RefreshTargets();
             TargetWindow target = targets.SelectedItem as TargetWindow;
@@ -490,6 +495,18 @@ namespace FarmMacro
             using (HelpForm help = new HelpForm(hotkeyLabel.Text, true))
                 help.RenderPreview(Path.Combine(folder, "help-740.png"), new Size(740, 650));
             profilePanel.RenderIncludedPresetsPreview(Path.Combine(folder, "included-presets-650.png"));
+            modes.SelectedIndex = ClickerMode;
+            quickClickPanel.SetPoints(new[] { new ClickPoint { X = 120, Y = 150 }, new ClickPoint { X = 360, Y = 150 }, new ClickPoint { X = 360, Y = 330 } });
+            foreach (Size size in new[] { new Size(1080, 820), new Size(900, 690) })
+            {
+                Size = size; PerformLayout(); Application.DoEvents(); TickEngine(); AssertPreviewLayout();
+                using (Bitmap bitmap = new Bitmap(Width, Height))
+                {
+                    DrawToBitmap(bitmap, new Rectangle(Point.Empty, Size));
+                    bitmap.Save(Path.Combine(folder, "mouse-points-" + size.Width + ".png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+            }
+            PointRouteEditor.RenderPreview(Path.Combine(folder, "point-route-editor.png"));
             Hide();
         }
         protected override bool ShowWithoutActivation { get { return previewMode || base.ShowWithoutActivation; } }
@@ -527,6 +544,11 @@ namespace FarmMacro
             if (m.Msg == 0x0312 && !closing)
             {
                 int id = m.WParam.ToInt32();
+                if (IsArrangingPoints && id != StopHotkey)
+                {
+                    if (id == PointHotkey) pointEditor.AddAtCursor(); else pointEditor.ActivateControls();
+                    base.WndProc(ref m); return;
+                }
                 if (inputDiagnostics != null && !inputDiagnostics.IsDisposed && id != StopHotkey) { inputDiagnostics.Activate(); base.WndProc(ref m); return; }
                 if (id == ToggleHotkey) Toggle();
                 else if (id == StopHotkey) Stop();
@@ -560,6 +582,7 @@ namespace FarmMacro
             trayToggle = new ToolStripMenuItem("Start macro", null, delegate { Toggle(); });
             trayRecord = new ToolStripMenuItem("Record routine", null, delegate
             {
+                if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
                 if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) { inputDiagnostics.Activate(); return; }
                 if (engine.IsArmed) return;
                 modes.SelectedIndex = ReplayMode;
@@ -588,6 +611,7 @@ namespace FarmMacro
         void RestoreFromTray()
         {
             if (closing) return;
+            if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
             Show();
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
             Activate();
@@ -666,6 +690,7 @@ namespace FarmMacro
         }
         void Toggle()
         {
+            if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
             if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) { inputDiagnostics.Activate(); return; }
             if (modes.SelectedIndex > ReplayMode) { ShowStatus("Choose Mouse clicker, Routines or Record & replay to start.", false); return; }
             if (modes.SelectedIndex == ReplayMode)
@@ -686,7 +711,8 @@ namespace FarmMacro
                 if (requestedMode == ClickerMode)
                 {
                     QuickClickSettings settings = quickClickPanel.CaptureSettings();
-                    engine.Start(target.Handle, new[] { settings.ToAction() }, settings.CountdownSeconds * 1000, settings.SessionSeconds * 1000, settings.MaxClicks);
+                    if (settings.UseMultiplePoints) engine.StartOrdered(target.Handle, settings);
+                    else engine.Start(target.Handle, new[] { settings.ToAction() }, settings.CountdownSeconds * 1000, settings.SessionSeconds * 1000, settings.MaxClicks);
                 }
                 else engine.Start(target.Handle, ReadActions(), (int)countdown.Value * 1000, (int)session.Value * 1000);
                 activeMode = requestedMode;
@@ -697,6 +723,7 @@ namespace FarmMacro
         }
         void Stop()
         {
+            if (IsArrangingPoints) pointEditor.CancelEditing();
             if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) inputDiagnostics.StopTest();
             engine.Stop(); sequencePanel.Stop(); SetEditing(true);
             ShowStatus("Stopped - all held inputs released", false);
@@ -711,6 +738,13 @@ namespace FarmMacro
         }
         void TickEngine()
         {
+            if (IsArrangingPoints)
+            {
+                if (NativeInput.IsEmergencyStopPressed()) { Stop(); return; }
+                startButton.Enabled = false; targets.Enabled = false; modes.Enabled = false;
+                ShowStatus("Arranging click points - save or cancel in the floating controls.", false);
+                return;
+            }
             if ((engine.IsArmed || sequencePanel.IsBusy) && NativeInput.IsEmergencyStopPressed()) { Stop(); return; }
             sequencePanel.Tick();
             try { engine.Tick(); }
@@ -761,6 +795,7 @@ namespace FarmMacro
         }
         void CapturePoint()
         {
+            if (IsArrangingPoints) { pointEditor.AddAtCursor(); return; }
             if (modes.SelectedIndex > ReplayMode) return;
             if (modes.SelectedIndex == ReplayMode) { ShowStatus("Record a click in the target to capture a sequence point.", false); return; }
             if (engine.IsArmed) { ShowStatus("Stop first to change a click point.", true); return; }
@@ -768,9 +803,11 @@ namespace FarmMacro
             if (modes.SelectedIndex == ClickerMode)
             {
                 int quickX, quickY;
-                if (target == null || !NativeInput.GetClientCursor(target.Handle, out quickX, out quickY)) { ShowStatus("Point inside the selected target, then press " + pointLabel + ".", true); return; }
-                quickClickPanel.SetFixedPoint(quickX, quickY);
-                ShowStatus("Fixed point saved: " + quickX + ", " + quickY + " (relative to the target window)", false);
+                if (target == null || !NativeInput.GetClientCursor(target.Handle, out quickX, out quickY) || !NativeInput.IsClientPointSafe(target.Handle, quickX, quickY)) { ShowStatus("Point inside the visible selected target, then press " + pointLabel + ".", true); return; }
+                try {
+                    quickClickPanel.SetCapturedPoint(quickX, quickY);
+                    ShowStatus(quickClickPanel.UsesMultiplePoints ? "Added point " + quickClickPanel.GetPoints().Count + " - clicks will follow the numbered order." : "Fixed point saved: " + quickX + ", " + quickY + " (relative to the target window)", false);
+                } catch (Exception error) { ShowStatus("Could not add point: " + error.Message, true); }
                 return;
             }
             DataGridViewRow row = grid.CurrentRow;
@@ -780,6 +817,35 @@ namespace FarmMacro
             if (!NativeInput.GetClientCursor(target.Handle, out x, out y)) { ShowStatus("Point inside the selected target window, then press " + pointLabel + ".", true); return; }
             row.Cells[5].Value = x; row.Cells[6].Value = y;
             ShowStatus("Click point saved: " + x + ", " + y + " (target client coordinates)", false);
+        }
+        void ArrangeClickPoints()
+        {
+            if (IsArrangingPoints) { pointEditor.ActivateControls(); return; }
+            if (engine.IsArmed || sequencePanel.IsBusy) { ShowStatus("Stop playback or recording before arranging points.", true); return; }
+            if (inputDiagnostics != null && !inputDiagnostics.IsDisposed) { inputDiagnostics.Activate(); return; }
+            TargetWindow target = targets.SelectedItem as TargetWindow;
+            if (target == null) { ShowStatus("Choose a target window before arranging click points.", true); return; }
+            bool restore = Visible;
+            try
+            {
+                using (PointRouteEditor editor = new PointRouteEditor(target.Handle, quickClickPanel.GetPoints()))
+                {
+                    pointEditor = editor;
+                    Hide();
+                    if (editor.ShowDialog(this) == DialogResult.OK)
+                    {
+                        quickClickPanel.SetPoints(editor.ResultPoints);
+                        ShowStatus("Saved " + editor.ResultPoints.Count + " click points. Start will follow their numbered order.", false);
+                    }
+                    else ShowStatus(String.IsNullOrWhiteSpace(editor.StatusMessage) ? "Point arrangement cancelled. Your previous points are kept." : editor.StatusMessage, false);
+                }
+            }
+            catch (Exception error) { ShowStatus("Could not arrange points: " + error.Message, true); }
+            finally
+            {
+                pointEditor = null;
+                if (!closing) { modes.Enabled = true; SetEditing(true); if (restore) { Show(); Activate(); } }
+            }
         }
         SavedProfile CurrentProfile()
         {
@@ -797,7 +863,7 @@ namespace FarmMacro
         }
         void ApplyWorkspace(MacroWorkspaceProfile profile)
         {
-            if (engine.IsArmed || sequencePanel.IsBusy) throw new InvalidOperationException("Stop the macro before loading a profile.");
+            if (engine.IsArmed || sequencePanel.IsBusy || IsArrangingPoints) throw new InvalidOperationException("Stop the macro and finish arranging points before loading a profile.");
             ProfileLibrary.Validate(profile);
             quickClickPanel.ApplySettings(profile.Clicker ?? new QuickClickSettings());
             sequencePanel.ApplyProfile(profile.Sequence);
