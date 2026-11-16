@@ -60,25 +60,19 @@ internal static class BundledPresetTests
                 int skipped;
                 Check(BundledPresetCatalog.Read(presets, out skipped).Count == 2 && skipped == 2 && File.ReadAllText(aPath) == original, "Scanning recursed or changed the portable files.");
             });
-            Run("Shipped starter and personal presets are discoverable and valid", delegate
+            Run("Public release includes only the two validated general starter presets", delegate
             {
                 string project = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
                 int skipped;
                 List<BundledPresetCatalog.Entry> rows = BundledPresetCatalog.Read(Path.Combine(project, "presets"), out skipped);
-                Check(rows.Count >= 4 && skipped == 0, "The release is missing valid bundled starters or personal profiles.");
-                bool clicker = false, timer = false, z = false;
+                Check(rows.Count == 2 && skipped == 0, "The public release must contain only its two general starter profiles.");
+                bool clicker = false, timer = false;
                 foreach (BundledPresetCatalog.Entry row in rows)
                 {
                     if (Path.GetFileName(row.FilePath) == "Starter-Gentle-clicker.json") clicker = true;
                     if (Path.GetFileName(row.FilePath) == "Starter-Space-timer.json") timer = true;
-                    if (Path.GetFileName(row.FilePath) == "Cultivation-Unbound-CV-Z24.json")
-                    {
-                        MacroWorkspaceProfile shipped = ProfileTransfer.Import(row.FilePath);
-                        foreach (MacroAction action in shipped.Timers.Actions)
-                            if (action.Input == "Z") z = action.Enabled && action.IntervalMs == 24000 && action.KeepCooldownOnResume && !action.X.HasValue && !action.Y.HasValue;
-                    }
                 }
-                Check(clicker && timer && z, "The starter files or independent cursor-aimed Z timer changed.");
+                Check(clicker && timer, "The general starter files are missing.");
             });
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -110,6 +104,40 @@ internal static class BundledPresetTests
                 {
                     panel.GetType().GetMethod("LoadSelected", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(panel, null);
                     Check(applies == 1 && captures == 0, "Explicit load did not apply exactly once.");
+                });
+                TextBox search = (TextBox)panel.GetType().GetField("search", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                ListBox names = (ListBox)panel.GetType().GetField("names", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                Label count = (Label)panel.GetType().GetField("countLabel", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                Label empty = (Label)panel.GetType().GetField("emptyLabel", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                Button load = (Button)panel.GetType().GetField("loadButton", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                Run("Find filters profile names case-insensitively without loading or capturing", delegate
+                {
+                    search.Text = "  IMPORTED 2  ";
+                    Check(names.Items.Count == 1 && (string)names.SelectedItem == "Alpha setup (imported 2)" && count.Text == "MATCHES  1 / 3", "Search did not match trimmed text or show filtered totals.");
+                    Check(applies == 1 && captures == 0 && library.ListNames().Count == 3, "Filtering applied, captured or rewrote a setup.");
+                });
+                Run("An unmatched Find query disables loading and clearing restores the library", delegate
+                {
+                    search.Text = "No such setup";
+                    Check(names.Items.Count == 0 && !load.Enabled && empty.Text.Contains("No matching profiles") && count.Text == "MATCHES  0 / 3", "No-match guidance or disabled loading differed.");
+                    search.Clear();
+                    Check(names.Items.Count == 3 && load.Enabled && count.Text == "SAVED PROFILES  3" && applies == 1 && captures == 0, "Clearing Find did not restore saved setups without loading them.");
+                });
+                Run("Import clears Find and reveals the newly added profile without loading", delegate
+                {
+                    search.Text = "No matches";
+                    panel.ImportFile(zPath);
+                    Check(search.Text.Length == 0 && names.Items.Count == 4 && (string)names.SelectedItem == "Zeta setup" && count.Text == "SAVED PROFILES  4", "The imported setup remained hidden by filtering.");
+                    Check(applies == 1 && captures == 0, "Import after filtering started or captured a workspace.");
+                });
+                Run("Save clears Find and selects the saved current workspace", delegate
+                {
+                    search.Text = "No matches";
+                    TextBox profileName = (TextBox)panel.GetType().GetField("profileName", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(panel);
+                    profileName.Text = "Fresh draft";
+                    panel.GetType().GetMethod("SaveCurrent", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(panel, null);
+                    Check(search.Text.Length == 0 && names.Items.Count == 5 && (string)names.SelectedItem == "Fresh draft" && library.Load("Fresh draft").Name == "Fresh draft", "The saved setup remained hidden or lost its name.");
+                    Check(applies == 1 && captures == 1, "Saving captured more than once or applied playback.");
                 });
             }
             Console.WriteLine(passed + " bundled-preset checks passed.");

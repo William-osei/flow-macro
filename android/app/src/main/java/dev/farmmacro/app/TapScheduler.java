@@ -53,6 +53,7 @@ public final class TapScheduler {
     public boolean isInFlight() { return inFlight; }
     public String getStatus() { return status; }
     public long getTapCount() { return tapCount; }
+    public long getGestureCount() { return tapCount; }
     public long getActiveMs() { return activeMs; }
 
     public void tick() {
@@ -76,9 +77,9 @@ public final class TapScheduler {
                 inFlight = true;
                 boolean accepted = backend.dispatch(row.action.copy(), new Completion() {
                     public void completed() { if (running && generation == token) inFlight = false; }
-                    public void cancelled() { if (running && generation == token) stop("Stopped: Android cancelled a tap"); }
+                    public void cancelled() { if (running && generation == token) stop("Stopped: Android cancelled a gesture"); }
                 });
-                if (!accepted) { stop("Stopped: Android did not accept a tap"); return; }
+                if (!accepted) { stop("Stopped: Android did not accept a gesture"); return; }
                 tapCount++;
                 if (row.remaining <= 0) { row.remaining = row.action.Burst; row.cycleAt = now; }
                 row.remaining--;

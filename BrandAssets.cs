@@ -10,7 +10,7 @@ namespace FarmMacro
     public static class BrandAssets
     {
         public const string AppName = "Flow Macro";
-        public const string Version = "1.5.0";
+        public const string Version = "1.6.0";
 
         internal const string SvgSource = @"<svg xmlns=""http://www.w3.org/2000/svg"" width=""256"" height=""256"" viewBox=""0 0 256 256"" role=""img"" aria-label=""Flow Macro"">
   <rect x=""1"" y=""1"" width=""254"" height=""254"" rx=""48"" fill=""#0e1422""/>

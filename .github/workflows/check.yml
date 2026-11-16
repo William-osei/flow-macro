@@ -44,7 +44,7 @@ jobs:
           retention-days: 14
 
   android-scheduler:
-    name: Android scheduler tests
+    name: Android gesture and profile tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -55,11 +55,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Compile and run scheduler tests
+      - name: Compile and run gesture and profile tests
         run: |
-          mkdir -p build/android-tests
-          javac -encoding UTF-8 -d build/android-tests \
+          mkdir -p build/android-tests build/test-deps
+          curl --fail --location --output build/test-deps/json-20260814.jar https://repo.maven.apache.org/maven2/org/json/json/20260814/json-20260814.jar
+          echo '7dd2de1533e766e2b6c07d8194da85145ad313a167a4760050f5c9b6839604fe  build/test-deps/json-20260814.jar' | sha256sum --check
+          javac -encoding UTF-8 -cp build/test-deps/json-20260814.jar -d build/android-tests \
             android/app/src/main/java/dev/farmmacro/app/TapAction.java \
+            android/app/src/main/java/dev/farmmacro/app/TapProfile.java \
             android/app/src/main/java/dev/farmmacro/app/TapScheduler.java \
-            android/tests/TapSchedulerTest.java
+            android/app/src/main/java/dev/farmmacro/app/GestureGeometry.java \
+            android/tests/TapSchedulerTest.java \
+            android/tests/TapProfileTest.java \
+            android/tests/GestureGeometryTest.java
           java -cp build/android-tests TapSchedulerTest
+          java -cp build/android-tests:build/test-deps/json-20260814.jar TapProfileTest
+          java -cp build/android-tests GestureGeometryTest

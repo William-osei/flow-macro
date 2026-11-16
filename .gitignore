@@ -8,6 +8,7 @@ tests/*.log
 /FarmMacro.exe
 /dist/
 /android/dist/
+/personal-presets/
 *.idsig
 
 # Local signing keys, credentials and editor state.

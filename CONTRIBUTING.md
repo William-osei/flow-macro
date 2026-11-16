@@ -25,10 +25,11 @@ Full APK builds run on Windows:
 
 ```powershell
 .\scripts\PrepareAndroidTools.ps1
+.\scripts\TestAndroid.ps1
 .\scripts\BuildAndroid.ps1
 ```
 
-Preparation downloads project-local tools into ignored `build/android-tools`. The APK build runs scheduler tests, compiles resources/Java/DEX, aligns the archive, and verifies its development signature. Keep the local development keystore private and retain it when updating an existing test installation. A fresh checkout creates its own key, so its APK will not update an installation signed by another developer's key.
+Preparation downloads project-local tools into ignored `build/android-tools`. The APK build runs gesture/profile/scheduler tests, compiles resources/Java/DEX, aligns the archive, and verifies its development signature. JVM codec tests download pinned `org.json:json:20260814` from Maven Central and verify SHA-256; the jar stays under ignored `build/test-deps` and is never an APK dependency. Keep the local development keystore private and retain it when updating a test installation. A fresh checkout creates its own key, so its APK will not update an installation signed by another developer's key.
 
 For only the platform-independent scheduler tests, use JDK 17 on any host:
 
@@ -45,6 +46,6 @@ Android's accessibility, window reporting, floating controls and mapping need ph
 
 ## Releases and changes
 
-After building both platforms, run `./scripts/PackageWindows.ps1` to prepare the Windows ZIP and SHA-256 file. Publish generated downloads through GitHub Releases. Keep executables, APKs, archives, local settings, SDK/JDK caches and signing keys out of Git.
+After building both platforms, run `./scripts/PackageWindows.ps1` to prepare the Windows ZIP and SHA-256 file. The public preset allowlist is `presets/catalog.txt`; `personal-presets/` stays ignored and unbundled. Publish generated downloads through GitHub Releases. Keep executables, APKs, archives, local settings, SDK/JDK caches and signing keys out of Git.
 
 For a contribution, describe the user-visible behavior, relevant checks, and anything requiring a live app or phone test. Add focused tests for engine or persistence behavior; avoid tests that only repeat a layout implementation. New settings must round-trip through the editor, saved profiles and portable import/export.

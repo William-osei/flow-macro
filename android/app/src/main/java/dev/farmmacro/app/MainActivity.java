@@ -41,7 +41,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/** User-driven editor. Opening this activity always stops the native tap player. */
+/** User-driven editor. Opening this activity always stops the touch player. */
 public final class MainActivity extends Activity {
     private static final int BACKGROUND = Color.rgb(14, 20, 34);
     private static final int SURFACE = Color.rgb(25, 34, 55);
@@ -70,13 +70,15 @@ public final class MainActivity extends Activity {
     private boolean binding;
     private boolean receiverRegistered;
     private String pendingExport;
+    private String pausedSnapshot;
+    private boolean preserveInvalidDraft;
 
     private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (!MacroAccessibilityService.ACTION_STATUS.equals(intent.getAction())) return;
             String message = intent.getStringExtra("status");
             long count = intent.getLongExtra("count", 0);
-            if (message != null) showStatus(message + "  ·  " + count + " taps", false);
+            if (message != null) showStatus(message + "  ·  " + count + " gestures", false);
             refreshServiceState();
         }
     };
@@ -108,7 +110,8 @@ public final class MainActivity extends Activity {
         if (service != null) service.stopMacro();
         try {
             TapProfile saved = ProfileStore.loadCurrent(this);
-            if (saved != null) bind(saved);
+            if (saved != null && !preserveInvalidDraft && pausedSnapshot != null && !pausedSnapshot.equals(saved.toJson())) bind(saved);
+            if (preserveInvalidDraft) showStatus("Your unsaved edits are kept. Fix their values before saving or opening controls.", true);
         } catch (Exception error) {
             showStatus("Could not reload the saved draft: " + friendly(error), true);
         }
@@ -117,7 +120,10 @@ public final class MainActivity extends Activity {
 
     @Override protected void onPause() {
         // Preserve a valid draft before opening the target, Settings or a file picker.
-        try { ProfileStore.save(this, capture()); } catch (Exception ignored) { }
+        try {
+            TapProfile draft = capture(); ProfileStore.save(this, draft);
+            pausedSnapshot = draft.toJson(); preserveInvalidDraft = false;
+        } catch (Exception ignored) { preserveInvalidDraft = true; }
         MacroAccessibilityService.setEditorVisible(false);
         super.onPause();
     }
@@ -170,17 +176,26 @@ public final class MainActivity extends Activity {
         outer.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         LinearLayout setup = card("Connect touch controls");
-        setup.addView(paragraph("When you enable the accessibility service, Flow Macro can perform your saved taps and check which app is active. It does not save screen text or send it anywhere. You choose when every routine starts."));
+        setup.addView(paragraph("When you enable the accessibility service, Flow Macro can perform the taps and swipes you configure in your chosen app. It checks the active app and window bounds. It does not read or save screen text, take screenshots or transmit data. You choose when every routine starts."));
         serviceState = text("Service not connected", 13, MUTED, true);
         serviceState.setPadding(0, dp(10), 0, dp(4));
         setup.addView(serviceState);
         setup.addView(button("Open accessibility settings", false, new View.OnClickListener() {
             @Override public void onClick(View view) {
-                saveDraft(false);
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                new AlertDialog.Builder(MainActivity.this).setTitle("Enable touch automation?")
+                    .setMessage("Flow Macro uses Android accessibility to perform taps and swipes that you configure in the app you select. It checks active-app and window metadata before sending each gesture. Profiles stay on this phone unless you export them. It does not read or save screen text, take screenshots or send data over a network.\n\nContinue opens Android Settings, where you can choose whether to enable Flow Macro. You can disable it there at any time.")
+                    .setNegativeButton("Not now", null)
+                    .setPositiveButton("Continue to Settings", (dialog, which) -> {
+                        saveDraft(false);
+                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                    }).show();
             }
         }));
         setup.addView(paragraph("Enable Flow Macro manually in Android Settings. Some phones restrict services for apps installed from a file. The app cannot enable this access for you."));
+        setup.addView(button("Read privacy policy", false, view -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/William-osei/flow-macro/blob/master/PRIVACY.md"))); }
+            catch (android.content.ActivityNotFoundException unavailable) { showStatus("No browser is available. The privacy policy is included with the source and release files.", true); }
+        }));
 
         LinearLayout profiles = card("Your profile");
         profiles.addView(label("PROFILE NAME"));
@@ -200,7 +215,7 @@ public final class MainActivity extends Activity {
                     current.TargetPackage = selected;
                     current.ScreenWidth = 0; current.ScreenHeight = 0;
                     for (ActionEditor editor : editors) {
-                        editor.action.X = -1; editor.action.Y = -1; editor.updatePoint();
+                        editor.action.clearMapping(); editor.updatePoint();
                     }
                     showStatus("Target changed. Map each enabled action in the new app.", false);
                 }
@@ -247,30 +262,22 @@ public final class MainActivity extends Activity {
         });
         timing.addView(paragraph("The floating Start button begins your routine only while the target app is active. Leaving that app, locking the screen or rotating the phone stops it. Press Start again after checking your points."));
 
-        LinearLayout mapping = card("Map your tap points");
-        mapping.addView(paragraph("Choose an action, open the target, then use Map on the floating controller and touch the desired point once. That touch saves a location without clicking through. Start with the tap test pad before choosing another app."));
+        LinearLayout mapping = card("Map points and swipes");
+        mapping.addView(paragraph("Open your target, then use + Tap or + Swipe on the floating controller. Touch once to place a tap, or drag from a swipe's start to its end. These mapping gestures are captured without clicking through. Numbered markers show your points while stopped; − Last removes the last action. Use Map to update an existing action."));
         mapAction = spinner();
         mapping.addView(mapAction, fieldParams());
         mapping.addView(button("Map selected action", false, new View.OnClickListener() {
             @Override public void onClick(View view) { openTargetWithControls(true); }
         }));
-        mapping.addView(button("Open tap test pad", false, new View.OnClickListener() {
+        mapping.addView(button("Open touch test pad", false, new View.OnClickListener() {
             @Override public void onClick(View view) { openTapPad(); }
         }));
 
-        LinearLayout actionsTitle = row();
-        actionsTitle.setGravity(Gravity.CENTER_VERTICAL);
-        actionsTitle.addView(text("Tap actions", 20, TEXT, true), weighted());
-        Button add = button("+ Add", false, new View.OnClickListener() {
-            @Override public void onClick(View view) {
-                if (editors.size() >= 32) { showStatus("Use at most 32 tap actions.", true); return; }
-                TapAction action = new TapAction();
-                action.Label = "Tap " + (editors.size() + 1);
-                addAction(action); refreshMapActions();
-            }
-        });
-        actionsTitle.addView(add, new LinearLayout.LayoutParams(dp(104), dp(48)));
-        body.addView(actionsTitle, new LinearLayout.LayoutParams(-1, dp(58)));
+        TextView actionsTitle = text("Touch actions", 20, TEXT, true); actionsTitle.setPadding(dp(2), dp(4), 0, dp(6)); body.addView(actionsTitle);
+        LinearLayout addActions = row();
+        addWeightedButton(addActions, "+ Tap", false, view -> addDraftAction(false));
+        addWeightedButton(addActions, "+ Swipe", false, view -> addDraftAction(true));
+        body.addView(addActions);
         actionsHost = column(); body.addView(actionsHost);
 
         status = text("Save a draft, map your points, then open the target.", 12, MUTED, false);
@@ -293,7 +300,7 @@ public final class MainActivity extends Activity {
 
     private void discoverTargets() {
         targetChoices.clear();
-        targetChoices.add(new Target("Flow Macro · tap test", getPackageName()));
+        targetChoices.add(new Target("Flow Macro · touch test", getPackageName()));
         Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> installed = getPackageManager().queryIntentActivities(launcher, 0);
         ArrayList<Target> found = new ArrayList<>();
@@ -388,7 +395,7 @@ public final class MainActivity extends Activity {
             service.showController(current.copy());
             service.setMapIndex(Math.max(0, mapAction.getSelectedItemPosition()));
             startActivity(launch);
-            Toast.makeText(this, mapping ? "In the target app, use Map on the floating controller." : "Check your points, then use the floating Start button.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, mapping ? "In the target app, use Map or add a new Tap/Swipe on the floating controller." : "Add or check your points, then use the floating Start button.", Toast.LENGTH_LONG).show();
         } catch (Exception error) { showStatus(friendly(error), true); }
     }
 
@@ -402,7 +409,7 @@ public final class MainActivity extends Activity {
             TapProfile profile = capture();
             profile.TargetPackage = getPackageName();
             profile.ScreenWidth = 0; profile.ScreenHeight = 0;
-            for (TapAction action : profile.Actions) { action.X = -1; action.Y = -1; }
+            for (TapAction action : profile.Actions) action.clearMapping();
             bind(profile); ProfileStore.save(this, profile);
             MacroAccessibilityService service = MacroAccessibilityService.getInstance();
             if (service != null) { service.showController(profile); service.setMapIndex(0); }
@@ -470,12 +477,21 @@ public final class MainActivity extends Activity {
         editors.add(editor); actionsHost.addView(editor.view);
     }
 
+    private void addDraftAction(boolean swipe) {
+        if (editors.size() >= 32) { showStatus("Use at most 32 touch actions.", true); return; }
+        TapAction action = new TapAction(); action.Kind = swipe ? "Swipe" : "Tap";
+        action.Label = action.Kind + " " + (editors.size() + 1);
+        action.IntervalMs = swipe ? 2000 : 1000; action.HoldMs = swipe ? 300 : 40;
+        addAction(action); refreshMapActions();
+        showStatus("Added “" + action.Label + "”. Map it in the target before running.", false);
+    }
+
     private void refreshMapActions() {
         int previous = mapAction.getSelectedItemPosition();
         ArrayList<String> labels = new ArrayList<>();
         for (int index = 0; index < editors.size(); index++) {
             String title = editors.get(index).label.getText().toString().trim();
-            labels.add((index + 1) + " · " + (title.isEmpty() ? "Untitled tap" : title));
+            labels.add((index + 1) + " · " + editors.get(index).action.Kind + " · " + (title.isEmpty() ? "Untitled action" : title));
         }
         setSpinnerItems(mapAction, labels);
         if (!labels.isEmpty()) mapAction.setSelection(Math.min(Math.max(previous, 0), labels.size() - 1));
@@ -493,14 +509,15 @@ public final class MainActivity extends Activity {
         final LinearLayout view;
         final EditText label, interval, hold, burst, offset;
         final CheckBox enabled;
-        final TextView point;
+        final TextView point, durationTitle;
+        final Spinner kind;
         ActionEditor(TapAction source) {
             action = source.copy();
             view = standaloneCard();
             LinearLayout titleRow = row();
-            label = edit("Tap label", false); label.setText(action.Label);
+            label = edit("Action label", false); label.setText(action.Label);
             label.setSingleLine(true);
-            label.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(60) });
+            label.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(50) });
             titleRow.addView(label, weighted());
             Button remove = button("Remove", false, v -> {
                 editors.remove(this); actionsHost.removeView(view); refreshMapActions();
@@ -510,7 +527,12 @@ public final class MainActivity extends Activity {
             enabled = new CheckBox(MainActivity.this);
             enabled.setText("Enabled"); enabled.setTextColor(TEXT); enabled.setChecked(action.Enabled);
             enabled.setButtonTintList(android.content.res.ColorStateList.valueOf(MINT));
-            enabled.setMinHeight(dp(44)); view.addView(enabled);
+            enabled.setMinHeight(dp(48));
+            LinearLayout typeRow = row(); typeRow.setGravity(Gravity.CENTER_VERTICAL); typeRow.addView(enabled, weighted());
+            kind = spinner();
+            ArrayList<String> types = new ArrayList<>(); types.add("Tap"); types.add("Swipe"); setSpinnerItems(kind, types);
+            kind.setSelection(action.isSwipe() ? 1 : 0); kind.setContentDescription("Gesture type");
+            typeRow.addView(kind, new LinearLayout.LayoutParams(dp(120), dp(48))); view.addView(typeRow);
             point = text("", 12, MUTED, false); point.setPadding(0, 0, 0, dp(10)); view.addView(point); updatePoint();
             LinearLayout first = row();
             interval = edit("3", true); interval.setText(seconds(action.IntervalMs));
@@ -520,19 +542,31 @@ public final class MainActivity extends Activity {
             LinearLayout second = row();
             hold = edit("60", true); hold.setText(String.valueOf(action.HoldMs));
             burst = edit("1", true); burst.setText(String.valueOf(action.Burst));
-            second.addView(field("Hold · milliseconds", hold), weighted());
-            second.addView(field("Taps per cycle", burst), weighted()); view.addView(second);
+            LinearLayout duration = column(); durationTitle = label(action.isSwipe() ? "Swipe · milliseconds" : "Hold · milliseconds");
+            duration.addView(durationTitle); duration.addView(hold, fieldParams()); second.addView(duration, weighted());
+            second.addView(field("Gestures per cycle", burst), weighted()); view.addView(second);
+            kind.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(AdapterView<?> parent, View selected, int position, long id) {
+                    String selectedKind = position == 1 ? "Swipe" : "Tap";
+                    if (selectedKind.equals(action.Kind)) return;
+                    action.Kind = selectedKind; action.clearMapping();
+                    durationTitle.setText(action.isSwipe() ? "Swipe · milliseconds" : "Hold · milliseconds");
+                    updatePoint(); refreshMapActions();
+                }
+                @Override public void onNothingSelected(AdapterView<?> parent) { }
+            });
         }
         void updatePoint() {
-            boolean mapped = action.X >= 0 && action.Y >= 0;
-            point.setText(mapped ? String.format(java.util.Locale.ROOT, "Mapped point · %.1f%% across, %.1f%% down", action.X * 100, action.Y * 100) : "Point not mapped · choose this action above, then Map");
+            boolean mapped = action.isMapped();
+            if (action.isSwipe()) point.setText(mapped ? String.format(java.util.Locale.ROOT, "A · %.1f%%, %.1f%%  →  B · %.1f%%, %.1f%%\nStraight swipe · re-map after changing the target layout", action.X * 100, action.Y * 100, action.EndX * 100, action.EndY * 100) : "Swipe not mapped · select this action above, then drag from start to end with Map");
+            else point.setText(mapped ? String.format(java.util.Locale.ROOT, "Mapped point · %.1f%% across, %.1f%% down", action.X * 100, action.Y * 100) : "Point not mapped · choose this action above, then Map");
             point.setTextColor(mapped ? MINT : MUTED);
         }
         TapAction read() {
             TapAction value = action.copy(); value.Label = label.getText().toString().trim();
-            value.Enabled = enabled.isChecked(); value.IntervalMs = milliseconds(interval, "Tap interval");
+            value.Enabled = enabled.isChecked(); value.IntervalMs = milliseconds(interval, "Gesture interval");
             value.OffsetMs = milliseconds(offset, "Initial delay");
-            value.HoldMs = integer(hold, "Hold time"); value.Burst = integer(burst, "Taps per cycle");
+            value.HoldMs = integer(hold, "Hold or swipe duration"); value.Burst = integer(burst, "Gestures per cycle");
             return value;
         }
     }

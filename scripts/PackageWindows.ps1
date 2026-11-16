@@ -19,7 +19,7 @@ function Add-ProjectFile([string]$RelativePath) {
 }
 
 Copy-Item -LiteralPath $executable.FullName -Destination (Join-Path $staging 'FarmMacro.exe')
-foreach ($file in @('Start Farm Macro.cmd','Start Farm Macro as Administrator.cmd','README.md','CHANGELOG.md','CONTRIBUTING.md','AGENTS.md','build.ps1','test.ps1')) { Add-ProjectFile $file }
+foreach ($file in @('Start Farm Macro.cmd','Start Farm Macro as Administrator.cmd','README.md','CHANGELOG.md','CONTRIBUTING.md','PRIVACY.md','AGENTS.md','build.ps1','test.ps1')) { Add-ProjectFile $file }
 foreach ($file in Get-ChildItem -LiteralPath $projectRoot -File -Filter '*.cs') { Add-ProjectFile $file.Name }
 foreach ($folder in @('tests','scripts','assets','docs','android/app/src/main','android/tests')) {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $projectRoot $folder) -File -Recurse) {
@@ -28,8 +28,12 @@ foreach ($folder in @('tests','scripts','assets','docs','android/app/src/main','
     }
 }
 foreach ($file in @('android/README.md','android/dist/FlowMacro-Android.apk','android/dist/FlowMacro-Android.apk.sha256','android/dist/FarmMacro-Android.apk','android/dist/FarmMacro-Android.apk.sha256','android/dist/README.md')) { Add-ProjectFile $file }
-foreach ($preset in Get-ChildItem -LiteralPath (Join-Path $projectRoot 'presets') -File -Filter '*.json') {
-    Add-ProjectFile $preset.FullName.Substring($projectRoot.Length + 1)
+Add-ProjectFile 'presets/catalog.txt'
+$presetNames = @(Get-Content -LiteralPath (Join-Path $projectRoot 'presets/catalog.txt') | Where-Object { -not [String]::IsNullOrWhiteSpace($_) })
+if ($presetNames.Count -eq 0) { throw 'The public preset catalog is empty.' }
+foreach ($presetName in $presetNames) {
+    if ([IO.Path]::GetFileName($presetName) -ne $presetName -or $presetName -notmatch '^Starter-[A-Za-z0-9-]+\.json$') { throw 'The public preset catalog contains an unsupported entry.' }
+    Add-ProjectFile ('presets/' + $presetName)
 }
 $preview = Join-Path $buildRoot ('previews-' + $release + '/clicker-900.png')
 if (-not (Test-Path -LiteralPath $preview)) { $preview = Join-Path $buildRoot 'previews-1.4/clicker-900.png' }
@@ -48,7 +52,7 @@ try {
     finally { $entryStream.Dispose(); $hasher.Dispose() }
     if ($packagedHash -ne (Get-FileHash -LiteralPath $executable.FullName -Algorithm SHA256).Hash) { throw 'Packaged executable checksum does not match the selected build.' }
     foreach ($entry in $archive.Entries) {
-        if ($entry.FullName -match '(^|/)(build|\.git|\.codex)/|\.keystore$|microsoft-openjdk') { throw 'A private or cached build file entered the package.' }
+        if ($entry.FullName -match '(^|/)(build|\.git|\.codex|personal-presets)/|\.keystore$|microsoft-openjdk') { throw 'A private or cached build file entered the package.' }
     }
     $entryCount = $archive.Entries.Count
 } finally { $archive.Dispose() }

@@ -6,12 +6,13 @@ A general-purpose Windows mouse clicker, keyboard timer and macro recorder, with
 
 ![Flow Macro mouse clicker workspace](docs/images/flow-macro.png)
 
-The current Windows release is **1.5.0**. Android **1.4.0** is a test build. Existing `FarmMacro.exe` launchers, local settings and profile files stay compatible.
+The current Windows release is **1.6.0**. Android **1.6.0** is a test build. Existing `FarmMacro.exe` launchers, local settings and tap-only profile files stay compatible.
 
 - Left, right and middle clicking, bursts, exact click totals and infinite sessions.
 - Independent keyboard and mouse timers, including cooldown timing across focus pauses.
 - Ordered recordings with key holds, chords and click positions.
-- Named profiles, portable JSON import/export and a browser for included presets.
+- Searchable named profiles, portable JSON import/export and a browser for general starter presets.
+- Android floating controls for adding tap points, straight swipes and removing the last action.
 - Focus pausing, an emergency stop, tray controls and a local input test pad.
 
 ## Start
@@ -49,7 +50,7 @@ The **Keep CD** checkbox preserves a single-press row's next allowed time across
 
 Supported inputs include letters, digits, navigation/editing keys, F1–F7 and F12, and the number pad. F8–F11 remain reserved for macro controls. Number-pad behavior follows Windows' Num Lock state; the app does not change it.
 
-Default examples are general-purpose. The optional personal C/V example preserves the original Cultivation Unbound setup; ordinary use does not require it. See [the personal game guide](docs/Personal-Cultivation-routine.md).
+Included examples are general-purpose. Your own imported routines stay in your local library. Personal profiles are excluded from public downloads and source tracking.
 
 Start Record/F8 explicitly, focus the target and perform your actions. Finish with F8, then review events and delays before playing. Keys, chords, holds and click positions are recorded. Continuous camera or pointer movement is not recorded.
 
@@ -61,9 +62,11 @@ Keep each input down balanced by an up event. Choose infinite replay, a loop cou
 
 **Profiles → Save current** stores the clicker, timer rows and recording together. Loading never starts a macro. Older profiles receive default clicker settings while keeping their original timers and recordings.
 
-Use **Profiles → Included presets** to browse the JSON examples shipped beside the app. Choose a preset and **Add to library**, then select it in the saved list and choose **Load selected**. Pick **Mouse clicker**, **Routines** or **Record & replay** before starting. The bundled examples include general starter tasks and optional personal Cultivation Unbound setups. C/V/Z timing stays in the personal profiles.
+Use **Profiles → Included presets** to browse the general examples shipped beside the app. Choose a preset and **Add to library**, then select it in the saved list and choose **Load selected**. Pick **Mouse clicker**, **Routines** or **Record & replay** before starting. **Find** filters saved names; Escape clears the filter. Searching never loads or starts a routine.
 
 The preset browser's **Open folder** button opens the portable `presets` folder. The saved-library **Open folder** link opens this Windows user's saved profile directory. Bundled files do not appear in the saved library until you add or import them.
+
+![Finding a saved profile](docs/images/profiles-search.png)
 
 Portable JSON imports receive a new name if needed and stay in the library for review. Importing does not start playback. Page-level Save/Load controls remain available for the most recent timer or recording setup.
 
@@ -75,7 +78,7 @@ Settings stay under `%LOCALAPPDATA%\FarmMacro`. The Windows app needs no account
 
 Input pauses automatically when the selected window loses focus. This focus pause differs from stopping a session with F9 or F10. Switching desktops or hiding the macro in the tray does not enable background input. Stop before an in-app text field, chat or menu: foreground protection cannot distinguish them from the rest of the same app.
 
-Flow Macro repeats the inputs and timings you configure; it does not find enemies, read cooldowns or adapt to changing controls. Acceptance depends on the target app. The bundled game profiles are examples, and the independent Z skill has not been verified in Roblox.
+Flow Macro repeats the inputs and timings you configure; it does not read cooldowns or adapt to changing controls. Acceptance depends on the target app.
 
 F10 remains available when hidden. Double-click the tray icon to restore the window. A second launch restores the existing copy rather than creating another macro engine.
 
@@ -87,11 +90,15 @@ Higher or unknown target privileges block starting with a readable explanation. 
 
 ## Android
 
-The Android preview uses mapped on-screen taps. Fresh setups begin with a general Tap 1 action and the local tap test pad. Choose another target and map its controls before starting. Existing mobile profiles remain compatible.
+The Android preview uses mapped on-screen taps and straight swipes. Fresh setups begin with one general Tap 1 action and the local tap test pad. From the floating controls, add a tap or swipe, map its point or endpoints, and remove the last action while stopped. Every action has its own timing. Choose another target and map its controls before starting. Existing tap-only profiles remain compatible.
 
-**Devices → Export Android draft** transfers timer settings. Imports clear points for fresh mapping and never start playback. Android requires manually enabled accessibility access. Stop prevents subsequent gestures; a gesture already dispatched can finish within one second.
+**Devices → Export Android draft** transfers timer settings as unmapped taps. Imports clear all points for fresh mapping and never start playback. Android requires manually enabled accessibility access. Stop prevents subsequent gestures; a gesture already dispatched can finish within one second. Profiles containing swipes use mobile format version 2, which older Android builds reject.
 
-Download `FlowMacro-Android.apk` from [Releases](https://github.com/William-osei/flow-macro/releases/latest) and see [the Android guide](android/README.md). The Android preview has passed scheduler and APK packaging checks; physical-device layouts and target-app acceptance remain untested. macOS, Linux and iOS builds are not included.
+Download `FlowMacro-Android.apk` from [Releases](https://github.com/William-osei/flow-macro/releases/latest) and see [the Android guide](android/README.md). The Android preview has automated gesture/profile/scheduler checks; physical-device layouts and target-app acceptance remain untested. macOS, Linux and iOS builds are not included.
+
+## Future Play Store release
+
+The app is free in this development release, with no billing, ads or paid unlocks. The [publishing and income plan](docs/PLAY_STORE_PLAN.md) covers Google Play requirements and a possible one-time Pro upgrade after phone testing. Store submission, account verification, AAB signing and real purchases are future work. See the [privacy policy](PRIVACY.md).
 
 ## Build and check
 
@@ -106,6 +113,6 @@ The Windows app builds with the .NET Framework compiler included on Windows, wit
 
 For a full Android APK, run `./scripts/PrepareAndroidTools.ps1`, then `./scripts/BuildAndroid.ps1` on Windows. This downloads project-local Android SDK/OpenJDK tools and creates a local development signing key. See the [Android build guide](android/README.md#build-on-windows). After building both platforms, `./scripts/PackageWindows.ps1` creates the Windows ZIP and checksum in `dist`.
 
-Git contains source, icons, documentation and portable presets. Generated executables, APKs, ZIPs, SDK caches and signing keys stay out of the repository; downloadable binaries live in GitHub Releases. CI checks the Windows engine/profile/input tests, builds and renders the Windows interface, and runs Android's pure-Java scheduler tests.
+Git contains source, icons, documentation and general starter presets. The release script uses `presets/catalog.txt` to select its public examples. `personal-presets/` is ignored and never packaged. Generated executables, APKs, ZIPs, SDK caches and signing keys stay out of the repository; downloadable binaries live in GitHub Releases. CI checks Windows tests and interface previews, plus Android's gesture/profile/scheduler tests.
 
 Icon source: `assets/farm-macro.svg`; regenerate its nine sizes with `scripts/BuildBrand.ps1`. Development and verification details are in [CONTRIBUTING.md](CONTRIBUTING.md).

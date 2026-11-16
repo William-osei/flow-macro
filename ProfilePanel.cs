@@ -16,6 +16,8 @@ namespace FarmMacro
         readonly ProfileLibrary library;
         readonly string presetsFolder;
         readonly ListBox names = new ListBox();
+        readonly TextBox search = new TextBox();
+        readonly List<string> savedNames = new List<string>();
         readonly TextBox profileName = new TextBox();
         readonly Label countLabel = new Label();
         readonly Label emptyLabel = new Label();
@@ -66,10 +68,11 @@ namespace FarmMacro
             TableLayoutPanel libraryLayout = new TableLayoutPanel();
             libraryLayout.Dock = DockStyle.Fill;
             libraryLayout.ColumnCount = 1;
-            libraryLayout.RowCount = 4;
+            libraryLayout.RowCount = 5;
             libraryLayout.Margin = new Padding(0);
             libraryLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             libraryLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             libraryLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
@@ -80,8 +83,25 @@ namespace FarmMacro
             countLabel.Font = new Font(Font, FontStyle.Bold);
             libraryLayout.Controls.Add(countLabel, 0, 0);
 
+            TableLayoutPanel searchRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 0, 0, 5) };
+            searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
+            searchRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            searchRow.Controls.Add(new Label { Text = "Find", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiTheme.Muted, Margin = new Padding(0) }, 0, 0);
+            search.Dock = DockStyle.Top;
+            search.BackColor = UiTheme.SurfaceRaised;
+            search.ForeColor = UiTheme.Text;
+            search.BorderStyle = BorderStyle.FixedSingle;
+            search.Margin = new Padding(0, 3, 0, 0);
+            search.MaxLength = 60;
+            search.AccessibleName = "Find saved profiles";
+            search.AccessibleDescription = "Filter saved profile names. Escape clears the search.";
+            search.TextChanged += delegate { FilterProfiles(); };
+            search.KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) { search.Clear(); e.SuppressKeyPress = true; } };
+            searchRow.Controls.Add(search, 1, 0);
+            libraryLayout.Controls.Add(searchRow, 0, 1);
+
             Panel listHost = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0) };
-            libraryLayout.Controls.Add(listHost, 0, 1);
+            libraryLayout.Controls.Add(listHost, 0, 2);
             names.Dock = DockStyle.Fill;
             names.BorderStyle = BorderStyle.None;
             names.BackColor = UiTheme.Surface;
@@ -107,12 +127,12 @@ namespace FarmMacro
             presets.AccessibleDescription = "Browse the portable example profiles included with this app. Adding one never starts playback.";
             UiTheme.StyleButton(presets, true);
             presets.Click += delegate { BrowsePresets(); };
-            libraryLayout.Controls.Add(presets, 0, 2);
+            libraryLayout.Controls.Add(presets, 0, 3);
 
             TableLayoutPanel libraryLinks = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0) };
             libraryLinks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
             libraryLinks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
-            libraryLayout.Controls.Add(libraryLinks, 0, 3);
+            libraryLayout.Controls.Add(libraryLinks, 0, 4);
             LinkLabel refresh = new LinkLabel();
             refresh.Text = "Refresh";
             refresh.Dock = DockStyle.Fill;
@@ -252,28 +272,39 @@ namespace FarmMacro
 
         public void RefreshProfiles()
         {
-            string selected = names.SelectedItem as string;
             try
             {
-                List<string> savedNames = library.ListNames();
+                List<string> availableNames = library.ListNames();
+                savedNames.Clear();
+                savedNames.AddRange(availableNames);
                 savedNames.Sort(StringComparer.OrdinalIgnoreCase);
-                refreshing = true;
-                names.BeginUpdate();
-                try
-                {
-                    names.Items.Clear();
-                    foreach (string name in savedNames) names.Items.Add(name);
-                    if (selected != null && names.Items.Contains(selected)) names.SelectedItem = selected;
-                    else if (names.Items.Count > 0) names.SelectedIndex = 0;
-                }
-                finally { names.EndUpdate(); refreshing = false; }
-                emptyLabel.Visible = names.Items.Count == 0;
-                names.Visible = names.Items.Count != 0;
-                countLabel.Text = "SAVED PROFILES  " + names.Items.Count;
-                loadButton.Enabled = names.SelectedItem != null;
-                if (names.SelectedItem != null) SelectProfile();
+                FilterProfiles();
             }
             catch (Exception error) { ShowStatus("Could not read profiles: " + error.Message, true); }
+        }
+
+        void FilterProfiles()
+        {
+            string selected = names.SelectedItem as string;
+            string query = search.Text.Trim();
+            refreshing = true;
+            names.BeginUpdate();
+            try
+            {
+                names.Items.Clear();
+                foreach (string name in savedNames)
+                    if (query.Length == 0 || name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) names.Items.Add(name);
+                if (selected != null && names.Items.Contains(selected)) names.SelectedItem = selected;
+                else if (names.Items.Count > 0) names.SelectedIndex = 0;
+            }
+            finally { names.EndUpdate(); refreshing = false; }
+            emptyLabel.Text = savedNames.Count == 0 ? "No profiles yet.\r\n\r\nSave a setup or add an included preset." : "No matching profiles.\r\n\r\nClear Find to see all saved setups.";
+            emptyLabel.Visible = names.Items.Count == 0;
+            names.Visible = names.Items.Count != 0;
+            countLabel.Text = query.Length == 0 ? "SAVED PROFILES  " + savedNames.Count : "MATCHES  " + names.Items.Count + " / " + savedNames.Count;
+            loadButton.Enabled = names.SelectedItem != null;
+            if (names.SelectedItem != null) SelectProfile();
+            else summary.Text = savedNames.Count == 0 ? "Save or add a setup, then choose Load selected." : "Clear Find or enter another name to choose a setup.";
         }
 
         void SelectProfile()
@@ -305,6 +336,7 @@ namespace FarmMacro
                 if (profile == null) throw new InvalidOperationException("The current setup could not be captured.");
                 profile.Name = name;
                 library.Save(profile);
+                search.Clear();
                 RefreshProfiles();
                 names.SelectedItem = profile.Name;
                 profileName.Text = profile.Name;
@@ -368,6 +400,7 @@ namespace FarmMacro
             MacroWorkspaceProfile profile = ProfileTransfer.Import(path);
             profile.Name = UniqueImportName(profile.Name);
             library.Save(profile);
+            search.Clear();
             RefreshProfiles();
             names.SelectedItem = profile.Name;
             profileName.Text = profile.Name;

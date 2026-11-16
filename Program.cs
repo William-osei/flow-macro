@@ -239,7 +239,7 @@ namespace FarmMacro
             FlowLayoutPanel firstTools = Flow(); firstTools.WrapContents = false;
             FlowLayoutPanel secondTools = Flow(); secondTools.WrapContents = false;
             presets.DropDownStyle = ComboBoxStyle.DropDownList;
-            presets.Items.AddRange(new object[] { "Keyboard repeat", "Click repeat", "Multiple click points", "Personal: Cultivation C/V" });
+            presets.Items.AddRange(new object[] { "Keyboard repeat", "Click repeat", "Multiple click points" });
             presets.Width = 208;
             presets.Margin = new Padding(0, 4, 8, 0);
             presets.SelectedIndex = 0;
@@ -636,13 +636,6 @@ namespace FarmMacro
             {
                 AddRow(new MacroAction { Enabled = true, Input = "Left click", IntervalMs = 1000, HoldMs = 40, Burst = 1 });
                 if (name == "Multiple click points") AddRow(new MacroAction { Enabled = true, Input = "Left click", IntervalMs = 1000, HoldMs = 40, Burst = 1, OffsetMs = 500 });
-            }
-            else if (name == "Personal: Cultivation C/V")
-            {
-                AddRow(new MacroAction { Enabled = true, Input = "C", IntervalMs = 11000, HoldMs = 500, Burst = 1 });
-                AddRow(new MacroAction { Enabled = true, Input = "V", IntervalMs = 11000, HoldMs = 500, Burst = 1, OffsetMs = 1300 });
-                AddRow(new MacroAction { Enabled = false, Input = "Z", IntervalMs = 24000, HoldMs = 60, Burst = 1, OffsetMs = 2600, KeepCooldownOnResume = true });
-                AddRow(new MacroAction { Enabled = false, Input = "X", IntervalMs = 12000, HoldMs = 60, Burst = 1, OffsetMs = 2400 });
             }
             else AddRow(new MacroAction { Enabled = true, Input = "Space", IntervalMs = 1000, HoldMs = 60, Burst = 1 });
             ShowStatus("Example loaded. Review its inputs and timing before starting.", false);

@@ -92,7 +92,7 @@ namespace FarmMacro
 
             FlowLayoutPanel editorTools = Flow();
             examples.DropDownStyle = ComboBoxStyle.DropDownList;
-            examples.Items.AddRange(new object[] { "Single click", "Double-click", "Press Space", "Personal: C then V" });
+            examples.Items.AddRange(new object[] { "Single click", "Double-click", "Press Space" });
             examples.SelectedIndex = 0;
             examples.Width = 164; examples.Margin = new Padding(0, 0, 7, 0);
             examples.AccessibleName = "Routine example";
@@ -325,26 +325,16 @@ namespace FarmMacro
             if (IsBusy) return;
             if (!ConfirmReplace()) return;
             List<MacroStep> steps = new List<MacroStep>();
-            if (examples.SelectedIndex == 3)
+            string input = examples.SelectedIndex == 2 ? "Space" : "Left click";
+            steps.Add(new MacroStep { Input = input, IsDown = true, DelayMs = 0 });
+            steps.Add(new MacroStep { Input = input, IsDown = false, DelayMs = 40 });
+            if (examples.SelectedIndex == 1)
             {
-                steps.Add(new MacroStep { Input = "C", IsDown = true, DelayMs = 0 });
-                steps.Add(new MacroStep { Input = "C", IsDown = false, DelayMs = 500 });
-                steps.Add(new MacroStep { Input = "V", IsDown = true, DelayMs = 1300 });
-                steps.Add(new MacroStep { Input = "V", IsDown = false, DelayMs = 500 });
-            }
-            else
-            {
-                string input = examples.SelectedIndex == 2 ? "Space" : "Left click";
-                steps.Add(new MacroStep { Input = input, IsDown = true, DelayMs = 0 });
+                steps.Add(new MacroStep { Input = input, IsDown = true, DelayMs = 80 });
                 steps.Add(new MacroStep { Input = input, IsDown = false, DelayMs = 40 });
-                if (examples.SelectedIndex == 1)
-                {
-                    steps.Add(new MacroStep { Input = input, IsDown = true, DelayMs = 80 });
-                    steps.Add(new MacroStep { Input = input, IsDown = false, DelayMs = 40 });
-                }
             }
             Populate(steps);
-            gap.Value = examples.SelectedIndex == 3 ? 10000 : 1000;
+            gap.Value = 1000;
             SetStatus("Example loaded. Review the target and timings before playing.", false);
         }
 

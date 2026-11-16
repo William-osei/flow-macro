@@ -35,19 +35,14 @@ $dist = Join-Path $projectRoot 'android/dist'
 foreach ($folder in @($workRoot, $generated, $classes, $dex, $dist)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
 
 if (-not $SkipTests) {
-    $testClasses = Join-Path $workRoot 'test-classes'
-    New-Item -ItemType Directory -Path $testClasses -Force | Out-Null
-    & $javac -encoding UTF-8 -d $testClasses (Join-Path $sourceRoot 'java/dev/farmmacro/app/TapAction.java') (Join-Path $sourceRoot 'java/dev/farmmacro/app/TapScheduler.java') (Join-Path $projectRoot 'android/tests/TapSchedulerTest.java')
-    Check-Exit 'Android scheduler test compilation'
-    & $java -cp $testClasses TapSchedulerTest
-    Check-Exit 'Android scheduler tests'
+    & (Join-Path $PSScriptRoot 'TestAndroid.ps1') -JdkHome $javaHome
 }
 
 $compiledResources = Join-Path $workRoot 'resources.zip'
 & $aapt compile --dir (Join-Path $sourceRoot 'res') -o $compiledResources
 Check-Exit 'Resource compilation'
 $unsigned = Join-Path $workRoot 'unsigned.apk'
-& $aapt link -o $unsigned -I $androidJar --manifest (Join-Path $sourceRoot 'AndroidManifest.xml') --min-sdk-version 26 --target-sdk-version 36 --version-code 140 --version-name 1.4.0 --java $generated $compiledResources
+& $aapt link -o $unsigned -I $androidJar --manifest (Join-Path $sourceRoot 'AndroidManifest.xml') --min-sdk-version 26 --target-sdk-version 36 --version-code 160 --version-name 1.6.0 --java $generated $compiledResources
 Check-Exit 'Resource linking'
 
 $javaFiles = @((Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'java') -Filter '*.java' -Recurse -File).FullName)

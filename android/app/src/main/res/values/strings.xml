@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Flow Macro</string>
-    <string name="accessibility_label">Flow Macro tap controls</string>
-    <string name="accessibility_description">Performs the tap points and timings you configure. Checks the active app package and window bounds so taps stop when the target changes, the screen locks, or its size changes. Screen text is not read, saved, or sent. Enable this service manually only if you want Flow Macro to perform these gestures. A floating Stop control remains available while a routine runs.</string>
+    <string name="accessibility_label">Flow Macro gesture controls</string>
+    <string name="accessibility_description">Performs the taps, straight swipes and timings you configure. Checks the active app package and window bounds so gestures stop when the target changes, the screen locks, or its size changes. Screen text is not read, saved, or sent. Enable this service manually only if you want Flow Macro to perform these gestures. A floating Stop control remains available while a routine runs.</string>
 </resources>
