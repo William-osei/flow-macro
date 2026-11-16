@@ -1,0 +1,56 @@
+{
+  "Version": 1,
+  "Name": "Starter - Gentle clicker",
+  "Clicker": {
+    "Input": "Left click",
+    "IntervalMs": 1000,
+    "HoldMs": 40,
+    "Burst": 1,
+    "X": null,
+    "Y": null,
+    "CountdownSeconds": 3,
+    "SessionSeconds": 0,
+    "MaxClicks": 10
+  },
+  "Timers": {
+    "Version": 1,
+    "CountdownSeconds": 3,
+    "SessionSeconds": 10,
+    "Actions": [
+      {
+        "Enabled": true,
+        "Input": "Left click",
+        "IntervalMs": 1000,
+        "OffsetMs": 0,
+        "HoldMs": 40,
+        "Burst": 1,
+        "X": null,
+        "Y": null,
+        "KeepCooldownOnResume": false
+      }
+    ]
+  },
+  "Sequence": {
+    "Version": 1,
+    "CountdownSeconds": 3,
+    "RepeatCount": 10,
+    "LoopDelayMs": 960,
+    "SessionSeconds": 0,
+    "Steps": [
+      {
+        "Input": "Left click",
+        "IsDown": true,
+        "DelayMs": 0,
+        "X": null,
+        "Y": null
+      },
+      {
+        "Input": "Left click",
+        "IsDown": false,
+        "DelayMs": 40,
+        "X": null,
+        "Y": null
+      }
+    ]
+  }
+}

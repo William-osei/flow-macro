@@ -1,0 +1,24 @@
+build/
+*.pdb
+*.tmp
+tests/*.exe
+tests/*.log
+
+# Generated downloads belong in GitHub Releases, not source history.
+/FarmMacro.exe
+/dist/
+/android/dist/
+*.idsig
+
+# Local signing keys, credentials and editor state.
+*.keystore
+*.jks
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+.vs/
+.vscode/
+*.user
+*.suo

@@ -1,0 +1,56 @@
+{
+  "Version": 1,
+  "Name": "Starter - Space timer",
+  "Clicker": {
+    "Input": "Left click",
+    "IntervalMs": 1000,
+    "HoldMs": 40,
+    "Burst": 1,
+    "X": null,
+    "Y": null,
+    "CountdownSeconds": 3,
+    "SessionSeconds": 0,
+    "MaxClicks": 10
+  },
+  "Timers": {
+    "Version": 1,
+    "CountdownSeconds": 3,
+    "SessionSeconds": 30,
+    "Actions": [
+      {
+        "Enabled": true,
+        "Input": "Space",
+        "IntervalMs": 2000,
+        "OffsetMs": 0,
+        "HoldMs": 60,
+        "Burst": 1,
+        "X": null,
+        "Y": null,
+        "KeepCooldownOnResume": false
+      }
+    ]
+  },
+  "Sequence": {
+    "Version": 1,
+    "CountdownSeconds": 3,
+    "RepeatCount": 10,
+    "LoopDelayMs": 1940,
+    "SessionSeconds": 0,
+    "Steps": [
+      {
+        "Input": "Space",
+        "IsDown": true,
+        "DelayMs": 0,
+        "X": null,
+        "Y": null
+      },
+      {
+        "Input": "Space",
+        "IsDown": false,
+        "DelayMs": 60,
+        "X": null,
+        "Y": null
+      }
+    ]
+  }
+}

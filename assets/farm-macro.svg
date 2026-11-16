@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Flow Macro">
+  <rect x="1" y="1" width="254" height="254" rx="48" fill="#0e1422"/>
+  <path d="M204 166 C225 125 207 75 163 55 C117 34 66 55 47 99 C27 145 48 195 94 212 C128 225 165 217 190 192" fill="none" stroke="#8991ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M171 191 L194 188 L190 211" fill="none" stroke="#8991ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M88 70 L96 171 L117 149 L137 184 L156 173 L137 141 L166 137 Z" fill="#5ddeba"/>
+</svg>
