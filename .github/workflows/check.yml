@@ -1,0 +1,65 @@
+name: Build and check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows tests and interface
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test engines, profiles and input
+        run: .\test.ps1
+      - name: Build Windows app
+        run: .\build.ps1
+      - name: Render interface without input
+        run: |
+          $preview = Start-Process .\FarmMacro.exe -ArgumentList '--preview', 'build/ci-previews' -Wait -PassThru
+          if ($preview.ExitCode -ne 0) { throw 'Interface preview checks failed.' }
+      - name: Upload Windows app and previews
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-app-and-previews
+          path: |
+            FarmMacro.exe
+            build/ci-previews/
+            presets/
+          if-no-files-found: error
+          retention-days: 14
+
+  android-scheduler:
+    name: Android scheduler tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile and run scheduler tests
+        run: |
+          mkdir -p build/android-tests
+          javac -encoding UTF-8 -d build/android-tests \
+            android/app/src/main/java/dev/farmmacro/app/TapAction.java \
+            android/app/src/main/java/dev/farmmacro/app/TapScheduler.java \
+            android/tests/TapSchedulerTest.java
+          java -cp build/android-tests TapSchedulerTest
